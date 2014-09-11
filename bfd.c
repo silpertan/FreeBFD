@@ -49,7 +49,7 @@ struct iovec msgiov = {
   &(msgbuf[0]),
   sizeof(msgbuf)
 };
-uint8_t cmsgbuf[sizeof(struct cmsghdr) + 64];
+uint8_t cmsgbuf[sizeof(struct cmsghdr) + 4];
 struct sockaddr_in msgaddr;
 struct msghdr msghdr = {
   (void *)&msgaddr,
