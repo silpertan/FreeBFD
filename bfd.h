@@ -13,6 +13,7 @@
 
 #include <stdint.h>
 #include <syslog.h>
+#include <netinet/ip.h>
 #include "tp-timers.h"
 
 /*

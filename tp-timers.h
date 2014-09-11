@@ -13,6 +13,7 @@
 
 #include <stdint.h>
 #include <signal.h>
+#include <sys/time.h>
 
 typedef struct _tpTimer {
   struct _tpTimer *next;

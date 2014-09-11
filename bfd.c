@@ -26,8 +26,12 @@
 #include <sys/uio.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <string.h>
+#include <stdbool.h>
 #include "bfd.h"
 #include "tp-timers.h"
+
+#define UNUSED(x) { if(x){} }
 
 int bfdDebug = BFD_DEFDEBUG;
 
@@ -45,7 +49,7 @@ struct iovec msgiov = {
   &(msgbuf[0]),
   sizeof(msgbuf)
 };
-uint8_t cmsgbuf[sizeof(struct cmsghdr) + 4];
+uint8_t cmsgbuf[sizeof(struct cmsghdr) + 64];
 struct sockaddr_in msgaddr;
 struct msghdr msghdr = {
   (void *)&msgaddr,
@@ -96,6 +100,7 @@ void bfdRcvPkt(int s, void *arg)
   struct cmsghdr *cm;
   bfdSession *bfd;
   uint32_t oldXmtTime;
+  bool goodTTL = false;
 
   /* Get packet */
   if ((mlen = recvmsg(s, msg, 0)) < 0) {
@@ -105,10 +110,21 @@ void bfdRcvPkt(int s, void *arg)
   /* Get source address */
   sin = (struct sockaddr_in *)(msg->msg_name);
   /* Get and check TTL */
-  cm = CMSG_FIRSTHDR(msg);
-  if (*CMSG_DATA(cm) != BFD_TTLVALUE) {
-    bfdLog(LOG_NOTICE, "Received pkt with invalid TTL %u from %s\n",
-	   *CMSG_DATA(cm), inet_ntoa(sin->sin_addr));
+  for (cm = CMSG_FIRSTHDR(msg);
+       cm != NULL;
+       cm = CMSG_NXTHDR(msg, cm))
+  {
+    if (cm->cmsg_level == IPPROTO_IP &&
+        cm->cmsg_type == IP_TTL &&
+        *(uint32_t*)CMSG_DATA(cm) == BFD_TTLVALUE)
+    {
+      goodTTL = true;
+      break;
+    }
+  }
+  if (!goodTTL) {
+    bfdLog(LOG_NOTICE, "Received pkt with invalid TTL from %s\n",
+           inet_ntoa(sin->sin_addr));
     return;
   }
   /* Various checks from section 6.5.6 */
@@ -237,6 +253,8 @@ void bfdRcvPkt(int s, void *arg)
 void bfdDetectTimeout(tpTimer *tim, void *arg)
 {
   bfdSession *bfd = (bfdSession *)arg;
+
+  UNUSED(tim)
 
   bfdLog(LOG_NOTICE, "Detect timeout on session 0x%x with peer %s, in state %d\n",
 	 bfd->localDiscr, inet_ntoa(bfd->peer), bfd->sessionState);
@@ -369,7 +387,7 @@ bfdSession *bfdMkSession(struct in_addr peer, uint32_t remoteDisc)
   static int srcPort = BFD_SRCPORTINIT;
 
   /* Get memory */
-  if ((bfd = malloc(sizeof(bfdSession))) == NULL) {
+  if ((bfd = (bfdSession*)malloc(sizeof(bfdSession))) == NULL) {
     bfdLog(LOG_NOTICE, "Can't malloc memory for new session: %m\n");
     return(NULL);
   }
@@ -439,6 +457,8 @@ bfdSession *bfdMkSession(struct in_addr peer, uint32_t remoteDisc)
 void bfdXmtTimeout(tpTimer *tim, void *arg)
 {
   bfdSession *bfd = (bfdSession *)arg;
+
+  UNUSED(tim)
 
   /* Allow intra-interval control packets again */
   bfd->upDownSent = 0;
@@ -519,6 +539,8 @@ void bfdStartPollSequence(int sig)
 {
   bfdSession *bfd;
 
+  UNUSED(sig)
+
   for (bfd = sessionList; bfd != NULL; bfd = bfd->listNext) {
     if (bfd->demandMode && (!bfd->pollSeqInProgress)) {
       bfd->pollSeqInProgress = 1;
@@ -538,6 +560,8 @@ void bfdStartPollSequence(int sig)
 void bfdToggleAdminDown(int sig)
 {
   bfdSession *bfd;
+
+  UNUSED(sig)
 
   for (bfd = sessionList; bfd != NULL; bfd = bfd->listNext) {
     if (bfd->sessionState == BFD_STATEADMINDOWN) {
