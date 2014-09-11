@@ -215,7 +215,7 @@ static void tpSubtractTime(tpTimer *t1, tpTimer *t2, struct timeval *result)
  * Side effects:     'action' will be called in 'timeout' milliseconds.
  */
 void tpStartMsTimer(tpTimer *t, uint32_t timeout,
-		   tpTimerAction action, void *arg)
+                   tpTimerAction action, void *arg)
 {
   struct timeval tv;
 
@@ -237,7 +237,7 @@ void tpStartMsTimer(tpTimer *t, uint32_t timeout,
  * Side effects:     'action' will be called in 'timeout' microseconds.
  */
 void tpStartUsTimer(tpTimer *t, uint32_t timeout,
-		   tpTimerAction action, void *arg)
+                   tpTimerAction action, void *arg)
 {
   struct timeval tv;
 
@@ -259,7 +259,7 @@ void tpStartUsTimer(tpTimer *t, uint32_t timeout,
  * Side effects:      'action' will be called in 'timeout' seconds.
  */
 void tpStartSecTimer(tpTimer *t, uint32_t timeout,
-		   tpTimerAction action, void *arg)
+                   tpTimerAction action, void *arg)
 {
   struct timeval tv;
 
@@ -280,7 +280,7 @@ void tpStartSecTimer(tpTimer *t, uint32_t timeout,
  * Side effects:   'action' will be called in 'timeout' seconds and microseconds.
  */
 void tpStartTimer(tpTimer *t, struct timeval *timeout,
-		tpTimerAction action, void *arg)
+                tpTimerAction action, void *arg)
 {
   struct timeval now;
 
@@ -334,7 +334,7 @@ uint32_t tpGetTimeRemaining(tpTimer *t)
   if (now.tv_sec > t->expiresAt.tv_sec) {
     return(0);
   } else if ((now.tv_sec == t->expiresAt.tv_sec) &&
-	     (now.tv_usec > t->expiresAt.tv_usec)) {
+             (now.tv_usec > t->expiresAt.tv_usec)) {
     return(0);
   }
   now.tv_sec = t->expiresAt.tv_sec - now.tv_sec;
@@ -388,7 +388,7 @@ static void tpCheckSignals(void)
   if (caughtSignal) {
     for (i = 0; i < TP_MAXSIGNALS; ++i) {
       if (sigismember(&caughtSigset, i) && sigActors[i]) {
-	sigActors[i](i);
+        sigActors[i](i);
       }
     }
     sigemptyset(&caughtSigset);
@@ -423,12 +423,12 @@ void tpDoEventLoop(void)
     if ((n = select(maxSkt, &rdset, NULL, NULL, nextTimer)) > 0) {
       /* Some sockets have data, find which ones */
       for (i = 0; i < TP_MAXSKTS; ++i) {
-	if (FD_ISSET(i, &rdset)) {
-	  if (sktActors[i] != NULL) {
-	    sktActors[i](i, sktArgs[i]);
-	  }
-	  if (--n <= 0) break;
-	}
+        if (FD_ISSET(i, &rdset)) {
+          if (sktActors[i] != NULL) {
+            sktActors[i](i, sktArgs[i]);
+          }
+          if (--n <= 0) break;
+        }
       }
     }
   }
