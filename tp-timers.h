@@ -36,8 +36,8 @@ typedef void (*tpSigActor)(int);
 #define TP_MAXSIGNALS       (SIGUNUSED + 1)
 
 /* Public function prototypes */
-int tpSetSktActor(unsigned int skt, tpSktActor actor, void *arg, tpSktActor *old);
-int tpRmSktActor(unsigned int skt);
+int tpSetSktActor(int skt, tpSktActor actor, void *arg, tpSktActor *old);
+int tpRmSktActor(int skt);
 void tpStartMsTimer(tpTimer *t, uint32_t timeout, tpTimerAction action, void *arg);
 void tpStartUsTimer(tpTimer *t, uint32_t timeout, tpTimerAction action, void *arg);
 void tpStartSecTimer(tpTimer *t, uint32_t timeout, tpTimerAction action, void *arg);
@@ -45,7 +45,7 @@ void tpStartTimer(tpTimer *t, struct timeval *timeout, tpTimerAction action, voi
 void tpStopTimer(tpTimer *t);
 void tpDoEventLoop(void);
 void tpInitTimers(void);
-uint32_t tpGetTimeRemaining(tpTimer *t);
+int64_t tpGetTimeRemaining(tpTimer *t);
 int tpSetSignalActor(tpSigActor actor, int sig);
 
 #ifdef TP_PRIVATE
