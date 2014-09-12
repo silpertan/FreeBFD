@@ -12,10 +12,14 @@ override CFLAGS := $(GEN_CFLAGS) $(INCDIRS) $(CFLAGS)
 CC_LINK = $(CC)
 LIBS = -Lavl-1.4.0 -lavl
 
-OBJS = bfd.o tp-timers.o
 EXE_FILES = bfdd
-SRCS = bfd.c tp-timers.c
-INCS = bfd.h tp-timers.h
+
+SRCS := bfd.c
+SRCS += tp-timers.c
+
+OBJS := $(SRCS:%.c=%.o)
+INCS := $(SRCS:%.c=%.h)
+
 TARFILE = bfd.tar.gz
 
 GEN_DEPS = -Wp,-M,-MP,-MT,$@,-MF,.deps/$(*F).d
