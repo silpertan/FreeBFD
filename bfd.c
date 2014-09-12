@@ -74,10 +74,12 @@ int rcvttl = 1;
 void bfdUsage(void)
 {
   fprintf(stderr, "Usage:\n");
-  fprintf(stderr, "\tbfdd [-b] -c connectaddr [-d] [-m mult] [-r tout] [-t tout]\n");
+  fprintf(stderr, "\tbfdd [-b] -c connectaddr[:port] [-d] [-l localport] [-m mult] [-r tout] [-t tout]\n");
   fprintf(stderr, "Where:\n");
   fprintf(stderr, "\t-b: toggle debug mode (default %s)\n", BFD_DEFDEBUG ? "on" : "off");
   fprintf(stderr, "\t-c: create session with 'connectaddr' (required option)\n");
+  fprintf(stderr, "\t    optionally override dest port (default %d)\n", BFD_DEFDESTPORT);
+  fprintf(stderr, "\t-l: listen on 'localport' (default %d)\n", BFD_DEFDESTPORT);
   fprintf(stderr, "\t-d: toggle demand mode desired (default %s)\n",
           BFD_DEFDEMANDMODEDESIRED ? "on" : "off");
   fprintf(stderr, "\t-m mult: detect multiplier (default %d)\n", BFD_DEFDETECTMULT);
@@ -368,7 +370,7 @@ void bfdSendCPkt(bfdSession *bfd, int fbit)
   cp.requiredMinEcho = 0;
   sin.sin_family = AF_INET;
   sin.sin_addr = bfd->peer;
-  sin.sin_port = htons(BFD_DEFDESTPORT);
+  sin.sin_port = htons(bfd->peerPort);
   if (sendto(bfd->sock, &cp, BFD_CPKTLEN, 0, (struct sockaddr *)&sin,
              sizeof(struct sockaddr_in)) < 0) {
     bfdLog(LOG_ERR, "Error sending control pkt: %m\n");
@@ -378,7 +380,9 @@ void bfdSendCPkt(bfdSession *bfd, int fbit)
 /*
  * Make a session state object
  */
-bfdSession *bfdMkSession(struct in_addr peer, uint32_t remoteDisc)
+bfdSession *bfdMkSession(struct in_addr peer,
+                         uint16_t peerPort,
+                         uint32_t remoteDisc)
 {
   bfdSession *bfd;
   struct sockaddr_in sin;
@@ -435,6 +439,7 @@ bfdSession *bfdMkSession(struct in_addr peer, uint32_t remoteDisc)
   bfd->upMinTx = defDesiredMinTx;
   bfd->requiredMinRx = defRequiredMinRx;
   bfd->peer = peer;
+  bfd->peerPort = peerPort;
   bfd->xmtTime = BFD_DOWNMINTX;
   bfd->listNext = sessionList;
   sessionList = bfd;
@@ -597,23 +602,40 @@ int main(int argc, char **argv)
 {
   int c, s;
   char *connectaddr = NULL;
+  char *cptr;
   struct hostent *hp;
   struct in_addr peeraddr;
+  uint16_t peerPort = BFD_DEFDESTPORT;
   struct sockaddr_in sin;
+  uint16_t localport = BFD_DEFDESTPORT;
 
   /* Init random() */
   srandom(time(NULL));
   /* Get command line options */
-  while ((c = getopt(argc, argv, "bc:dm:r:t:")) != -1) {
+  while ((c = getopt(argc, argv, "bc:dhl:m:r:t:")) != -1) {
     switch (c) {
     case 'b':
       bfdDebug = !bfdDebug;
       break;
     case 'c':
       connectaddr = optarg;
+      if ((cptr = strchr(connectaddr, ':')) != NULL) {
+        uint32_t tmp;
+
+        *cptr = '\0';
+        cptr++;
+        sscanf(cptr, "%u", &tmp);
+        peerPort = tmp & 0xffff;
+      }
       break;
     case 'd':
       defDemandModeDesired = !defDemandModeDesired;
+      break;
+    case 'h':
+      bfdUsage();
+      exit(0);
+    case 'l':
+      localport = atoi(optarg);
       break;
     case 'm':
       defDetectMult = atoi(optarg);
@@ -668,9 +690,9 @@ int main(int argc, char **argv)
   }
   sin.sin_family = AF_INET;
   sin.sin_addr.s_addr = INADDR_ANY;
-  sin.sin_port = htons(BFD_DEFDESTPORT);
+  sin.sin_port = htons(localport);
   if (bind(s, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
-    bfdLog(LOG_ERR, "Can't bind socket to default port %d: %m\n", BFD_DEFDESTPORT);
+    bfdLog(LOG_ERR, "Can't bind socket to port %d: %m\n", localport);
     exit(1);
   }
   /* Add socket to select poll */
@@ -690,7 +712,7 @@ int main(int argc, char **argv)
   /* Make the initial session */
   bfdLog(LOG_INFO, "Creating initial session with %s (%s)\n", connectaddr,
          inet_ntoa(peeraddr));
-  if (bfdMkSession(peeraddr, 0) == NULL) {
+  if (bfdMkSession(peeraddr, peerPort, 0) == NULL) {
     bfdLog(LOG_ERR, "Can't creating initial session: %m\n");
     exit(1);
   }
