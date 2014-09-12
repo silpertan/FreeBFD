@@ -1,3 +1,8 @@
+/.deps
 *.o
-bfdd
-avl-1.4.0
+/bfdd
+/avl-1.4.0
+
+TAGS
+tags
+cscope.*
