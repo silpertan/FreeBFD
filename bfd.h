@@ -12,6 +12,7 @@
 #define _BFD_H_
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <syslog.h>
 #include <netinet/ip.h>
 #include "tp-timers.h"
@@ -85,7 +86,7 @@ typedef struct _bfdSession {
 #define BFD_STATEINIT       3
 #define BFD_STATEUP         4
 
-/* Macros for debug and logging support */
+/* debug and logging support */
 extern int bfdDebug;
 #define BFD_DEFDEBUG            1
 #define BFD_LOGID               "bfdd"
@@ -98,7 +99,7 @@ extern int bfdDebug;
 #define BFD_DEFDESIREDMINTX        100000
 #define BFD_DEFREQUIREDMINRX       50000
 #define BFD_CPKTLEN                24         /* Length of control packet */
-#define BFD_TTLVALUE               255
+#define BFD_1HOPTTLVALUE           255
 #define BFD_DOWNMINTX              1000000
 #define BFD_HASHSIZE               251        /* Should be prime */
 #define BFD_MKHKEY(val)            ((val) % BFD_HASHSIZE)
@@ -109,17 +110,18 @@ extern int bfdDebug;
 /* Function prototypes */
 void bfdRcvPkt(int s, void *arg);
 void bfdSendCPkt(bfdSession *bfd, int fbit);
-void bfdUsage(void);
 void bfdDetectTimeout(tpTimer *tim, void *arg);
 void bfdSessionDown(bfdSession *bfd, uint8_t diag);
 void bfdSessionUp(bfdSession *bfd);
 bfdSession *bfdGetSession(bfdCpkt *cp, struct sockaddr_in *sin);
-bfdSession *bfdMkSession(struct in_addr peer, uint16_t peerPort, uint32_t remoteDisc);
+bool bfdInitSession(bfdSession *bfd);
 void bfdXmtTimeout(tpTimer *tim, void *arg);
 void bfdStartXmtTimer(bfdSession *bfd);
 void bfdRmSession(bfdSession *bfd);
 int bfdRmFromList(bfdSession **list, bfdSession *bfd);
 void bfdSigUsr1(int sig);
 void bfdSigUsr2(int sig);
+void bfdStartPollSequence(int sig);
+void bfdToggleAdminDown(int sig);
 
 #endif /* _BFD_H_ */

@@ -1,6 +1,7 @@
 /.deps
 *.o
 /bfdd
+/bfd
 /avl-1.4.0
 
 TAGS

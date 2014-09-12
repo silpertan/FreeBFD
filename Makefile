@@ -12,10 +12,11 @@ override CFLAGS := $(GEN_CFLAGS) $(INCDIRS) $(CFLAGS)
 CC_LINK = $(CC)
 LIBS = -Lavl-1.4.0 -lavl
 
-EXE_FILES = bfdd
+EXE_FILES = bfd
 
 SRCS := bfd.c
 SRCS += tp-timers.c
+SRCS += bfd-main.c
 
 OBJS := $(SRCS:%.c=%.o)
 INCS := $(SRCS:%.c=%.h)
@@ -44,9 +45,9 @@ $(AVL_DIR)/README:
 $(AVL_DIR)/libavl.a: $(AVL_DIR)/README
 	(cd $(AVL_DIR); ./configure; make)
 
-bfdd: $(OBJS)
+bfd: $(OBJS)
 	@echo "LINK $@"
-	$(Q)$(CC_LINK) -o bfdd $(OBJS) $(LIBS)
+	$(Q)$(CC_LINK) -o $@ $(OBJS) $(LIBS)
 
 clean:
 	rm -f *.o $(EXE_FILES)

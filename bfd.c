@@ -15,11 +15,8 @@
  * Copyright (c) 2003 Sonus Networks, Inc.
  */
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <netdb.h>
-#include <time.h>
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -27,7 +24,6 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <string.h>
-#include <stdbool.h>
 #include "bfd.h"
 #include "tp-timers.h"
 
@@ -35,60 +31,9 @@
 
 int bfdDebug = BFD_DEFDEBUG;
 
-/*
- * Session defaults
- */
-uint8_t defDemandModeDesired = BFD_DEFDEMANDMODEDESIRED;
-uint8_t defDetectMult = BFD_DEFDETECTMULT;
-uint32_t defDesiredMinTx = BFD_DEFDESIREDMINTX;
-uint32_t defRequiredMinRx = BFD_DEFREQUIREDMINRX;
-
-/* Buffer and msghdr for received packets */
-uint8_t msgbuf[BFD_CPKTLEN];
-struct iovec msgiov = {
-  &(msgbuf[0]),
-  sizeof(msgbuf)
-};
-uint8_t cmsgbuf[sizeof(struct cmsghdr) + 4];
-struct sockaddr_in msgaddr;
-struct msghdr msghdr = {
-  (void *)&msgaddr,
-  sizeof(msgaddr),
-  &msgiov,
-  1,
-  (void *)&cmsgbuf,
-  sizeof(cmsgbuf),
-  0
-};
-
 bfdSession *sessionList;                  /* List of active sessions */
 bfdSession *sessionHash[BFD_HASHSIZE];    /* Find session from discriminator */
 bfdSession *peerHash[BFD_HASHSIZE];       /* Find session from peer address */
-
-int ttlval = 255;
-int rcvttl = 1;
-
-/*
- * Command line usage info
- */
-void bfdUsage(void)
-{
-  fprintf(stderr, "Usage:\n");
-  fprintf(stderr, "\tbfdd [-b] -c connectaddr[:port] [-d] [-l localport] [-m mult] [-r tout] [-t tout]\n");
-  fprintf(stderr, "Where:\n");
-  fprintf(stderr, "\t-b: toggle debug mode (default %s)\n", BFD_DEFDEBUG ? "on" : "off");
-  fprintf(stderr, "\t-c: create session with 'connectaddr' (required option)\n");
-  fprintf(stderr, "\t    optionally override dest port (default %d)\n", BFD_DEFDESTPORT);
-  fprintf(stderr, "\t-l: listen on 'localport' (default %d)\n", BFD_DEFDESTPORT);
-  fprintf(stderr, "\t-d: toggle demand mode desired (default %s)\n",
-          BFD_DEFDEMANDMODEDESIRED ? "on" : "off");
-  fprintf(stderr, "\t-m mult: detect multiplier (default %d)\n", BFD_DEFDETECTMULT);
-  fprintf(stderr, "\t-r tout: required min rx (default %d)\n", BFD_DEFREQUIREDMINRX);
-  fprintf(stderr, "\t-t tout: desired min tx (default %d)\n", BFD_DEFDESIREDMINTX);
-  fprintf(stderr, "Signals:\n");
-  fprintf(stderr, "\tUSR1: start poll sequence on all demand mode sessions\n");
-  fprintf(stderr, "\tUSR2: toggle admin down on all sessions\n");
-}
 
 /*
  * All received packets come through here.
@@ -118,7 +63,7 @@ void bfdRcvPkt(int s, void *arg)
   {
     if (cm->cmsg_level == IPPROTO_IP &&
         cm->cmsg_type == IP_TTL &&
-        *(uint32_t*)CMSG_DATA(cm) == BFD_TTLVALUE)
+        *(uint32_t*)CMSG_DATA(cm) == BFD_1HOPTTLVALUE)
     {
       goodTTL = true;
       break;
@@ -380,22 +325,14 @@ void bfdSendCPkt(bfdSession *bfd, int fbit)
 /*
  * Make a session state object
  */
-bfdSession *bfdMkSession(struct in_addr peer,
-                         uint16_t peerPort,
-                         uint32_t remoteDisc)
+bool bfdInitSession(bfdSession *bfd)
 {
-  bfdSession *bfd;
   struct sockaddr_in sin;
   int pcount;
   uint32_t hkey;
   static int srcPort = BFD_SRCPORTINIT;
+  int ttlval = BFD_1HOPTTLVALUE;
 
-  /* Get memory */
-  if ((bfd = (bfdSession*)malloc(sizeof(bfdSession))) == NULL) {
-    bfdLog(LOG_NOTICE, "Can't malloc memory for new session: %m\n");
-    return(NULL);
-  }
-  memset(bfd, 0, sizeof(bfdSession));
   /*
    * Get socket for transmitting control packets.  Note that if we could use
    * the destination port (3784) for the source port we wouldn't need a
@@ -404,14 +341,14 @@ bfdSession *bfdMkSession(struct in_addr peer,
   if ((bfd->sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
     bfdLog(LOG_NOTICE, "Can't get socket for new session: %m\n");
     free(bfd);
-    return(NULL);
+    return false;
   }
   /* Set TTL to 255 for all transmitted packets */
   if (setsockopt(bfd->sock, SOL_IP, IP_TTL, &ttlval, sizeof(ttlval)) < 0) {
     bfdLog(LOG_ERR, "Can't set TTL for new session: %m\n");
     close(bfd->sock);
     free(bfd);
-    return(NULL);
+    return false;
   }
   /* Find an available source port in the proper range */
   sin.sin_family = AF_INET;
@@ -423,37 +360,30 @@ bfdSession *bfdMkSession(struct in_addr peer,
       bfdLog(LOG_NOTICE, "Can't find source port for new session\n");
       close(bfd->sock);
       free(bfd);
-      return(NULL);
+      return false;
     }
     if (srcPort >= BFD_SRCPORTMAX) srcPort = BFD_SRCPORTINIT;
     sin.sin_port = htons(srcPort++);
   } while (bind(bfd->sock, (struct sockaddr *)&sin, sizeof(sin)) < 0);
   /* Initialize the session */
   bfd->sessionState = BFD_STATEFAILING;
-  bfd->demandModeDesired = defDemandModeDesired;
-  bfd->detectMult = defDetectMult;
   bfd->localDiscr = (uint32_t)bfd;
-  bfd->remoteDiscr = remoteDisc;
   bfd->desiredMinTx = BFD_DOWNMINTX;
   bfd->activeDesiredMinTx = BFD_DOWNMINTX;
-  bfd->upMinTx = defDesiredMinTx;
-  bfd->requiredMinRx = defRequiredMinRx;
-  bfd->peer = peer;
-  bfd->peerPort = peerPort;
   bfd->xmtTime = BFD_DOWNMINTX;
   bfd->listNext = sessionList;
   sessionList = bfd;
   hkey = BFD_MKHKEY(bfd->localDiscr);
   bfd->hashNext = sessionHash[hkey];
   sessionHash[hkey] = bfd;
-  hkey = BFD_MKHKEY(peer.s_addr);
+  hkey = BFD_MKHKEY(bfd->peer.s_addr);
   bfd->peerNext = peerHash[hkey];
   peerHash[hkey] = bfd;
   /* Start transmitting control packets */
   bfdXmtTimeout(&(bfd->xmtTimer), bfd);
   bfdLog(LOG_NOTICE, "Created new session 0x%x with peer %s\n",
          bfd->localDiscr, inet_ntoa(bfd->peer));
-  return(bfd);
+  return true;
 }
 
 /*
@@ -593,132 +523,4 @@ void bfdToggleAdminDown(int sig)
              inet_ntoa(bfd->peer));
     }
   }
-}
-
-/*
- * Main entry point of process
- */
-int main(int argc, char **argv)
-{
-  int c, s;
-  char *connectaddr = NULL;
-  char *cptr;
-  struct hostent *hp;
-  struct in_addr peeraddr;
-  uint16_t peerPort = BFD_DEFDESTPORT;
-  struct sockaddr_in sin;
-  uint16_t localport = BFD_DEFDESTPORT;
-
-  /* Init random() */
-  srandom(time(NULL));
-  /* Get command line options */
-  while ((c = getopt(argc, argv, "bc:dhl:m:r:t:")) != -1) {
-    switch (c) {
-    case 'b':
-      bfdDebug = !bfdDebug;
-      break;
-    case 'c':
-      connectaddr = optarg;
-      if ((cptr = strchr(connectaddr, ':')) != NULL) {
-        uint32_t tmp;
-
-        *cptr = '\0';
-        cptr++;
-        sscanf(cptr, "%u", &tmp);
-        peerPort = tmp & 0xffff;
-      }
-      break;
-    case 'd':
-      defDemandModeDesired = !defDemandModeDesired;
-      break;
-    case 'h':
-      bfdUsage();
-      exit(0);
-    case 'l':
-      localport = atoi(optarg);
-      break;
-    case 'm':
-      defDetectMult = atoi(optarg);
-      break;
-    case 'r':
-      defRequiredMinRx = atoi(optarg);
-      break;
-    case 't':
-      defDesiredMinTx = atoi(optarg);
-      break;
-    default:
-      bfdUsage();
-      exit(1);
-    }
-  }
-  /* Must have specified peer address */
-  if (connectaddr == NULL) {
-    bfdUsage();
-    exit(1);
-  }
-  openlog(BFD_LOGID, LOG_PID | (bfdDebug ? LOG_PERROR : 0), LOG_DAEMON);
-  if (!bfdDebug) {
-    if (daemon(0, 0) < 0) {
-      bfdLog(LOG_ERR, "Can't daemonize: %m\n");
-      exit(1);
-    }
-  }
-  bfdLog(LOG_NOTICE,
-         "BFD: demandModeDesired %s, detectMult %d, desiredMinTx %d, requiredMinRx %d\n",
-         (defDemandModeDesired ? "on" : "off"), defDetectMult, defDesiredMinTx,
-         defRequiredMinRx);
-
-  /* Init timers package */
-  tpInitTimers();
-
-  /* Set signal handlers */
-  tpSetSignalActor(bfdStartPollSequence, SIGUSR1);
-  tpSetSignalActor(bfdToggleAdminDown, SIGUSR2);
-
-  /* Make UDP socket to receive control packets */
-  if ((s = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
-    bfdLog(LOG_ERR, "Can't get receive socket: %m\n");
-    exit(1);
-  }
-  if (setsockopt(s, SOL_IP, IP_TTL, &ttlval, sizeof(ttlval)) < 0) {
-    bfdLog(LOG_ERR, "Can't set TTL for outgoing packets: %m\n");
-    exit(1);
-  }
-  if (setsockopt(s, SOL_IP, IP_RECVTTL, &rcvttl, sizeof(rcvttl)) < 0) {
-    bfdLog(LOG_ERR, "Can't set receive TTL for incoming packets: %m\n");
-    exit(1);
-  }
-  sin.sin_family = AF_INET;
-  sin.sin_addr.s_addr = INADDR_ANY;
-  sin.sin_port = htons(localport);
-  if (bind(s, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
-    bfdLog(LOG_ERR, "Can't bind socket to port %d: %m\n", localport);
-    exit(1);
-  }
-  /* Add socket to select poll */
-  tpSetSktActor(s, bfdRcvPkt, (void *)&msghdr, NULL);
-
-  /* Get peer address */
-  if ((hp = gethostbyname(connectaddr)) == NULL) {
-    bfdLog(LOG_ERR, "Can't resolve %s: %s\n", connectaddr, hstrerror(h_errno));
-    exit(1);
-  }
-  if (hp->h_addrtype != AF_INET) {
-    bfdLog(LOG_ERR, "Resolved address type not AF_INET\n");
-    exit(1);
-  }
-  memcpy(&peeraddr, hp->h_addr, sizeof(peeraddr));
-
-  /* Make the initial session */
-  bfdLog(LOG_INFO, "Creating initial session with %s (%s)\n", connectaddr,
-         inet_ntoa(peeraddr));
-  if (bfdMkSession(peeraddr, peerPort, 0) == NULL) {
-    bfdLog(LOG_ERR, "Can't creating initial session: %m\n");
-    exit(1);
-  }
-
-  /* Wait for events */
-  tpDoEventLoop();
-  /* Should never return */
-  exit(1);
 }
