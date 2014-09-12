@@ -12,11 +12,10 @@ override CFLAGS := $(GEN_CFLAGS) $(INCDIRS) $(CFLAGS)
 CC_LINK = $(CC)
 LIBS = -Lavl-1.4.0 -lavl
 
-EXE_FILES = bfd
+EXE_FILES = bfd bfdd
 
 SRCS := bfd.c
 SRCS += tp-timers.c
-SRCS += bfd-main.c
 
 OBJS := $(SRCS:%.c=%.o)
 INCS := $(SRCS:%.c=%.h)
@@ -45,9 +44,13 @@ $(AVL_DIR)/README:
 $(AVL_DIR)/libavl.a: $(AVL_DIR)/README
 	(cd $(AVL_DIR); ./configure; make)
 
-bfd: $(OBJS)
+bfd: $(OBJS) bfd-main.o
 	@echo "LINK $@"
-	$(Q)$(CC_LINK) -o $@ $(OBJS) $(LIBS)
+	$(Q)$(CC_LINK) -o $@ $(OBJS) bfd-main.o $(LIBS)
+
+bfdd: $(OBJS) bfdd-main.o
+	@echo "LINK $@"
+	$(Q)$(CC_LINK) -o $@ $(OBJS) bfdd-main.o $(LIBS) -lconfig
 
 clean:
 	rm -f *.o $(EXE_FILES)
@@ -56,6 +59,6 @@ realclean:
 	rm -rf *.o $(EXE_FILES) $(AVL_DIR) *~ *.bak $(TARFILE)
 
 tarfile:
-	tar cvfz $(TARFILE) $(SRCS) $(INCS) Makefile $(AVL_TARFILE)
+	tar cvfz $(TARFILE) $(SRCS) bfd-main.c bfdd-main.c$(INCS) Makefile $(AVL_TARFILE)
 
 -include $(shell mkdir .deps 2>/dev/null) $(wildcard .deps/*)
