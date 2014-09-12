@@ -41,7 +41,7 @@ bfdSession *peerHash[BFD_HASHSIZE];       /* Find session from peer address */
 void bfdRcvPkt(int s, void *arg)
 {
   struct msghdr *msg = (struct msghdr *)arg;
-  int mlen;
+  ssize_t mlen;
   struct sockaddr_in *sin;
   bfdCpkt *cp;
   struct cmsghdr *cm;
@@ -330,7 +330,7 @@ bool bfdInitSession(bfdSession *bfd)
   struct sockaddr_in sin;
   int pcount;
   uint32_t hkey;
-  static int srcPort = BFD_SRCPORTINIT;
+  static uint16_t srcPort = BFD_SRCPORTINIT;
   int ttlval = BFD_1HOPTTLVALUE;
 
   /*
@@ -367,7 +367,7 @@ bool bfdInitSession(bfdSession *bfd)
   } while (bind(bfd->sock, (struct sockaddr *)&sin, sizeof(sin)) < 0);
   /* Initialize the session */
   bfd->sessionState = BFD_STATEFAILING;
-  bfd->localDiscr = (uint32_t)bfd;
+  bfd->localDiscr = (uint32_t)((uintptr_t)bfd & 0xffffffff);
   bfd->desiredMinTx = BFD_DOWNMINTX;
   bfd->activeDesiredMinTx = BFD_DOWNMINTX;
   bfd->xmtTime = BFD_DOWNMINTX;
@@ -409,7 +409,7 @@ void bfdXmtTimeout(tpTimer *tim, void *arg)
 void bfdStartXmtTimer(bfdSession *bfd)
 {
   uint32_t jitter;
-  int maxpercent;
+  uint32_t maxpercent;
 
   /*
    * From section 6.5.2: trasmit interval should be randomly jittered between
@@ -417,7 +417,7 @@ void bfdStartXmtTimer(bfdSession *bfd)
    * between 75% and 90%.
    */
   maxpercent = (bfd->detectMult == 1) ? 16 : 26;
-  jitter = (bfd->xmtTime*(75 + (random() % maxpercent)))/100;
+  jitter = (bfd->xmtTime*(75 + ((uint32_t)random() % maxpercent)))/100;
   tpStartUsTimer(&(bfd->xmtTimer), jitter, bfdXmtTimeout, bfd);
 }
 

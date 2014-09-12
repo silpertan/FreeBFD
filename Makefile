@@ -6,7 +6,7 @@ AVL_TARFILE = avl-1.4.0.tar.gz
 AVL_DIR = avl-1.4.0
 
 CC = cc
-GEN_CFLAGS = -g -Wall
+GEN_CFLAGS = -g -Wall -Wconversion -Werror
 INCDIRS = -I. -I$(AVL_DIR)
 override CFLAGS := $(GEN_CFLAGS) $(INCDIRS) $(CFLAGS)
 CC_LINK = $(CC)

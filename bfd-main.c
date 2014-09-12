@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <inttypes.h>
 #include "bfd.h"
 
 /*
@@ -111,7 +112,7 @@ int main(int argc, char **argv)
   bfdSession *bfd;
 
   /* Init random() */
-  srandom(time(NULL));
+  srandom((unsigned int)time(NULL));
 
   /* Get command line options */
   while ((c = getopt(argc, argv, "bc:dhl:m:r:t:")) != -1) {
@@ -126,7 +127,7 @@ int main(int argc, char **argv)
 
         *cptr = '\0';
         cptr++;
-        sscanf(cptr, "%u", &tmp);
+        sscanf(cptr, "%" SCNu32, &tmp);
         peerPort = tmp & 0xffff;
       }
       break;
@@ -137,16 +138,32 @@ int main(int argc, char **argv)
       bfdUsage();
       exit(0);
     case 'l':
-      localport = atoi(optarg);
+      if (sscanf(optarg, "%" SCNu16, &localport) != 1) {
+         fprintf(stderr, "Arg 'localport' must be an integer\n\n");
+         bfdUsage();
+         exit(0);
+      }
       break;
     case 'm':
-      defDetectMult = atoi(optarg);
+      if (sscanf(optarg, "%" SCNu8, &defDetectMult) != 1) {
+         fprintf(stderr, "Arg 'mult' must be an integer\n\n");
+         bfdUsage();
+         exit(0);
+      }
       break;
     case 'r':
-      defRequiredMinRx = atoi(optarg);
+      if (sscanf(optarg, "%" SCNu32, &defRequiredMinRx) != 1) {
+         fprintf(stderr, "Arg 'tout' must be an integer\n\n");
+         bfdUsage();
+         exit(0);
+      }
       break;
     case 't':
-      defDesiredMinTx = atoi(optarg);
+      if (sscanf(optarg, "%" SCNu32, &defDesiredMinTx) != 1) {
+         fprintf(stderr, "Arg 'tout' must be an integer\n\n");
+         bfdUsage();
+         exit(0);
+      }
       break;
     default:
       bfdUsage();
