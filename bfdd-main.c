@@ -117,7 +117,7 @@ int main(int argc, char **argv)
   }
 
   /* Init random() */
-  srandom(time(NULL));
+  srandom((unsigned int)time(NULL));
 
   /* Init timers package */
   tpInitTimers();
@@ -140,8 +140,8 @@ int main(int argc, char **argv)
   }
 
   if ((sns = config_lookup(&cfg, "Sessions")) != NULL) {
-    int cnt = config_setting_length(sns);
-    int i;
+    int32_t cnt = config_setting_length(sns);
+    uint32_t i;
 
     for (i=0; i<cnt; i++) {
       struct hostent *hp;
@@ -163,7 +163,7 @@ int main(int argc, char **argv)
       }
 
       if (config_setting_lookup_int(sn, "PeerPort", &peerPort)) {
-        if (peerPort & 0xffff0000) {
+        if ((uint32_t)peerPort & 0xffff0000) {
           bfdLog(LOG_ERR, "Session %d PeerPort out of range: %d - Skipping Session!\n",
                  i, peerPort);
           continue;
@@ -173,7 +173,7 @@ int main(int argc, char **argv)
       }
 
       if (config_setting_lookup_int(sn, "LocalPort", &localport)) {
-        if (localport & 0xffff0000) {
+        if ((uint32_t)localport & 0xffff0000) {
           bfdLog(LOG_ERR, "Session %d LocalPort out of range: %d - Skipping Session!\n",
                  i, localport);
           continue;
@@ -187,7 +187,7 @@ int main(int argc, char **argv)
       }
 
       if (config_setting_lookup_int(sn, "DetectMult", &detectMult)) {
-        if (detectMult & 0xffffff00) {
+        if ((uint32_t)detectMult & 0xffffff00) {
           bfdLog(LOG_ERR, "Session %d DetectMult out of range: %d - Skipping Session!\n",
                  i, localport);
           continue;
@@ -209,7 +209,7 @@ int main(int argc, char **argv)
              i, (demandMode ? "on" : "off"), detectMult, desMinTx, reqMinRx);
 
       /* Make UDP socket to receive control packets */
-      setupRcvSocket(localport);
+      setupRcvSocket((uint16_t)localport);
 
       /* Get peer address */
       if ((hp = gethostbyname(connectaddr)) == NULL) {
@@ -236,12 +236,12 @@ int main(int argc, char **argv)
 
       memset(bfd, 0, sizeof(bfdSession));
 
-      bfd->demandModeDesired = demandMode;
-      bfd->detectMult        = detectMult;
-      bfd->upMinTx           = desMinTx;
-      bfd->requiredMinRx     = reqMinRx;
+      bfd->demandModeDesired = (uint8_t)demandMode;
+      bfd->detectMult        = (uint8_t)detectMult;
+      bfd->upMinTx           = (uint32_t)desMinTx;
+      bfd->requiredMinRx     = (uint32_t)reqMinRx;
       bfd->peer              = peeraddr;
-      bfd->peerPort          = peerPort;
+      bfd->peerPort          = (uint16_t)peerPort;
       // bfd->remoteDiscr = 0;
 
       if (!bfdInitSession(bfd)) {
