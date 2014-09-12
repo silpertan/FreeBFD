@@ -11,4 +11,4 @@ It consists of two processes:
           receive session state change notifications
 
 Dependencies:
-- libconfig
+- libconfig (http://www.hyperrealm.com/libconfig/)
