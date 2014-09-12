@@ -63,9 +63,9 @@ static tpSigActor sigActors[TP_MAXSIGNALS];
  * Side effects:    When there is read data in the socket, the actor function
  *                  will be called.
  */
-int tpSetSktActor(unsigned int skt, tpSktActor actor, void *arg, tpSktActor *old)
+int tpSetSktActor(int skt, tpSktActor actor, void *arg, tpSktActor *old)
 {
-  if (skt >= TP_MAXSKTS) {
+  if (skt >= TP_MAXSKTS && skt < 0) {
     errno = EBADF;
     return(-1);
   }
@@ -90,9 +90,9 @@ int tpSetSktActor(unsigned int skt, tpSktActor actor, void *arg, tpSktActor *old
  *
  * Side effects:   If the socket has read data, no actor function will be called.
  */
-int tpRmSktActor(unsigned int skt)
+int tpRmSktActor(int skt)
 {
-  if (skt >= TP_MAXSKTS) {
+  if (skt >= TP_MAXSKTS && skt < 0) {
     errno = EBADF;
     return(-1);
   }
@@ -325,7 +325,7 @@ void tpStopTimer(tpTimer *t)
  * Returns:             microseconds until timer expires.
  *                      -1 if timer not running.
  */
-uint32_t tpGetTimeRemaining(tpTimer *t)
+int64_t tpGetTimeRemaining(tpTimer *t)
 {
   struct timeval now;
 

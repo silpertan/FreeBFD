@@ -111,7 +111,7 @@ int main(int argc, char **argv)
   bfdSession *bfd;
 
   /* Init random() */
-  srandom(time(NULL));
+  srandom((unsigned int)time(NULL));
 
   /* Get command line options */
   while ((c = getopt(argc, argv, "bc:dhl:m:r:t:")) != -1) {
@@ -137,16 +137,16 @@ int main(int argc, char **argv)
       bfdUsage();
       exit(0);
     case 'l':
-      localport = atoi(optarg);
+      localport = (uint16_t)atoi(optarg);
       break;
     case 'm':
-      defDetectMult = atoi(optarg);
+      defDetectMult = (uint8_t)atoi(optarg);
       break;
     case 'r':
-      defRequiredMinRx = atoi(optarg);
+      defRequiredMinRx = (uint32_t)atoi(optarg);
       break;
     case 't':
-      defDesiredMinTx = atoi(optarg);
+      defDesiredMinTx = (uint32_t)atoi(optarg);
       break;
     default:
       bfdUsage();
