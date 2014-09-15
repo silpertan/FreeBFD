@@ -1,5 +1,7 @@
 /.deps
 *.o
+*.pyc
+*.pyo
 /bfdd
 /bfd
 /avl-1.4.0
