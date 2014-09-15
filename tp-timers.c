@@ -65,7 +65,7 @@ static tpSigActor sigActors[TP_MAXSIGNALS];
  */
 int tpSetSktActor(int skt, tpSktActor actor, void *arg, tpSktActor *old)
 {
-  if (skt >= TP_MAXSKTS && skt < 0) {
+  if (skt >= TP_MAXSKTS || skt < 0) {
     errno = EBADF;
     return(-1);
   }
@@ -92,7 +92,7 @@ int tpSetSktActor(int skt, tpSktActor actor, void *arg, tpSktActor *old)
  */
 int tpRmSktActor(int skt)
 {
-  if (skt >= TP_MAXSKTS && skt < 0) {
+  if (skt >= TP_MAXSKTS || skt < 0) {
     errno = EBADF;
     return(-1);
   }
