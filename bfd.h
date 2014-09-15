@@ -76,6 +76,7 @@ typedef struct _bfdSession {
   tpTimer xmtTimer;
   struct in_addr peer;
   uint16_t peerPort;
+  uint16_t localPort;
   int sock;
 } bfdSession;
 
@@ -114,7 +115,8 @@ void bfdDetectTimeout(tpTimer *tim, void *arg);
 void bfdSessionDown(bfdSession *bfd, uint8_t diag);
 void bfdSessionUp(bfdSession *bfd);
 bfdSession *bfdGetSession(bfdCpkt *cp, struct sockaddr_in *sin);
-bool bfdInitSession(bfdSession *bfd);
+void bfdSetupRcvSocket(uint16_t localport);
+bool bfdRegisterSession(bfdSession *bfd);
 void bfdXmtTimeout(tpTimer *tim, void *arg);
 void bfdStartXmtTimer(bfdSession *bfd);
 void bfdRmSession(bfdSession *bfd);

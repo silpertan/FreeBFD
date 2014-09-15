@@ -322,16 +322,75 @@ void bfdSendCPkt(bfdSession *bfd, int fbit)
   }
 }
 
+/* Buffer and msghdr for received packets */
+static uint8_t msgbuf[BFD_CPKTLEN];
+static struct iovec msgiov = {
+  &(msgbuf[0]),
+  sizeof(msgbuf)
+};
+static uint8_t cmsgbuf[sizeof(struct cmsghdr) + 4];
+static struct sockaddr_in msgaddr;
+static struct msghdr msghdr = {
+  (void *)&msgaddr,
+  sizeof(msgaddr),
+  &msgiov,
+  1,
+  (void *)&cmsgbuf,
+  sizeof(cmsgbuf),
+  0
+};
+
+/*
+ * Create and Register socket to receive control messages
+ */
+void bfdSetupRcvSocket(uint16_t localport)
+{
+  struct sockaddr_in sin;
+  int ttlval = BFD_1HOPTTLVALUE;
+  int rcvttl = 1;
+  int s;
+
+  if ((s = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
+    bfdLog(LOG_ERR, "Can't get receive socket: %m\n");
+    exit(1);
+  }
+
+  if (setsockopt(s, SOL_IP, IP_TTL, &ttlval, sizeof(ttlval)) < 0) {
+    bfdLog(LOG_ERR, "Can't set TTL for outgoing packets: %m\n");
+    exit(1);
+  }
+
+  if (setsockopt(s, SOL_IP, IP_RECVTTL, &rcvttl, sizeof(rcvttl)) < 0) {
+    bfdLog(LOG_ERR, "Can't set receive TTL for incoming packets: %m\n");
+    exit(1);
+  }
+
+  sin.sin_family      = AF_INET;
+  sin.sin_addr.s_addr = INADDR_ANY;
+  sin.sin_port        = htons(localport);
+
+  if (bind(s, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
+    bfdLog(LOG_ERR, "Can't bind socket to port %d: %m\n", localport);
+    exit(1);
+  }
+
+  /* Add socket to select poll */
+  tpSetSktActor(s, bfdRcvPkt, (void *)&msghdr, NULL);
+}
+
 /*
  * Make a session state object
  */
-bool bfdInitSession(bfdSession *bfd)
+bool bfdRegisterSession(bfdSession *bfd)
 {
   struct sockaddr_in sin;
   int pcount;
   uint32_t hkey;
   static uint16_t srcPort = BFD_SRCPORTINIT;
   int ttlval = BFD_1HOPTTLVALUE;
+
+  /* Make UDP socket to receive control packets */
+  bfdSetupRcvSocket((uint16_t)bfd->localPort);
 
   /*
    * Get socket for transmitting control packets.  Note that if we could use
