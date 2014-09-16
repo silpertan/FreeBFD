@@ -16,9 +16,11 @@
 static void bfddUsage(void)
 {
   fprintf(stderr, "Usage:\n");
-  fprintf(stderr, "\tbfdd -c config-file\n");
+  fprintf(stderr, "\tbfdd [options] -c config-file\n");
   fprintf(stderr, "Where:\n");
   fprintf(stderr, "\t-c: load 'config-file' for startup configuration\n");
+  fprintf(stderr, "Options:\n");
+  fprintf(stderr, "\t-d: Do not run in daemon mode\n");
   fprintf(stderr, "Signals:\n");
   fprintf(stderr, "\tUSR1: start poll sequence on all demand mode sessions\n");
   fprintf(stderr, "\tUSR2: toggle admin down on all sessions\n");
@@ -31,15 +33,19 @@ int main(int argc, char **argv)
 {
   int c;
   char *configFile = NULL;
+  int daemon_mode = 1;
 
   config_t cfg;
   config_setting_t *sns;
 
   /* Get command line options */
-  while ((c = getopt(argc, argv, "c:")) != -1) {
+  while ((c = getopt(argc, argv, "c:d")) != -1) {
     switch (c) {
     case 'c':
       configFile = optarg;
+      break;
+    case 'd':
+      daemon_mode = 0;
       break;
     default:
       bfddUsage();
@@ -55,9 +61,11 @@ int main(int argc, char **argv)
 
   openlog(BFD_LOGID, LOG_PID | (bfdDebug ? LOG_PERROR : 0), LOG_DAEMON);
 
-  if (daemon(1, 0) != 0) {
-    bfdLog(LOG_ERR, "Unable to daemonize!");
-    exit(1);
+  if (daemon_mode) {
+    if (daemon(1, 0) != 0) {
+      bfdLog(LOG_ERR, "Unable to daemonize!");
+      exit(1);
+    }
   }
 
   /* Init random() */
