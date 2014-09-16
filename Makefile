@@ -15,6 +15,7 @@ LIBS = -Lavl-1.4.0 -lavl
 EXE_FILES = bfd bfdd
 
 SRCS := bfd.c
+SRCS += bfd-monitor.c
 SRCS += tp-timers.c
 
 OBJS := $(SRCS:%.c=%.o)
