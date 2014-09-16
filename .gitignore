@@ -6,6 +6,12 @@
 /bfd
 /avl-1.4.0
 
+# Various indexing files.
+GPATH
+GRTAGS
+GSYMS
+GTAGS
+ID
 TAGS
 tags
 cscope.*
