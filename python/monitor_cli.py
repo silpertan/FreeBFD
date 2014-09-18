@@ -7,10 +7,54 @@ import os
 import sys
 import socket
 import select
+import json
+import cmd
 
 CTRL_ADDR = ('localhost', 5643)
 
 READ_ONLY = select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR
+
+class Commander(cmd.Cmd):
+    def __init__(self, sock):
+        cmd.Cmd.__init__(self, stdout=sys.stdout)
+        self.sock = sock
+
+    def do_quit(self, line):
+        '''Quit the monitor.
+        '''
+        return True
+
+    def do_raw(self, line):
+        '''Send raw ascii line to server.
+
+        Does not json encode the data.
+        '''
+        self.sock.sendall(line)
+
+    def do_subscribe(self, line):
+        '''Subscribe to a session.
+
+        Argument can be '<session_id>' or 'all'.
+        '''
+        sess_id = line.split()[0]
+        cmd = {
+            'cmd': 'subscribe',
+            'session' : sess_id,
+        }
+        self.sock.sendall(json.dumps(cmd))
+
+    def do_unsubscribe(self, line):
+        '''Unsubscribe from a session.
+
+        Argument can be '<session_id>' or 'all'.
+        '''
+        sess_id = line.split()[0]
+        cmd = {
+            'cmd': 'unsubscribe',
+            'session' : sess_id,
+        }
+        self.sock.sendall(json.dumps(cmd))
+
 
 def main():
     poller = select.poll()
@@ -23,6 +67,8 @@ def main():
     except socket.error as msg:
         sys.stderr.write('%s\n' % msg)
         sys.exit(1)
+
+    cmdr = Commander(sock)
 
     try:
         isRunning = True
@@ -46,19 +92,20 @@ def main():
                 if flag & (select.POLLIN | select.POLLPRI):
                     if s is sock:
                         data = sock.recv(256)
-                        if data:
+                        if data.strip():
                             sys.stderr.write('RECV: "%s"\n' % data)
                         else:
+                            sys.stderr.write('Monitor Server closed connection.\n')
                             isRunning = False
                             break
 
                     if s is sys.stdin:
                         count += 1
-                        data = sys.stdin.readline()
-                        if data and data.strip().lower() == 'quit':
-                            isRunning = False
-                            break
-                        sock.sendall(data.strip())
+                        data = sys.stdin.readline().strip()
+                        if data:
+                            if cmdr.onecmd(data):
+                                isRunning = False
+                                break
 
     finally:
         sys.stderr.write('closing socket\n')

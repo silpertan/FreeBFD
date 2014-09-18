@@ -58,8 +58,8 @@ def main():
                 else:
                     data = s.recv(256)
                     if data:
-                        sys.stderr.write('RECV [%s]: "%s"\n' % (s.getpeername(), data))
-                        poller.modify(s, READ_WRITE)
+                        sys.stderr.write('RECV [%s]: (%d)"%s"\n' % (s.getpeername(),
+                                                                    len(data), data))
                     else:
                         sys.stderr.write('closing %s after reading no data\n'
                                          % str(s.getpeername()))
