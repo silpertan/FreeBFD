@@ -66,38 +66,22 @@ Questions & Concerns
 Monitor Commands
 ++++++++++++++++
 
-* List current sessions::
-
-    {
-        "cmd" : "list"
-    }
-
 * Subscribe to session(s)::
 
     {
         "cmd" : "subscribe",
-	"session" : "<session_id>|all",
+        "session" : "<session_id>|all",
     }
 
 * Unsubscribe from session(s)::
 
     {
         "cmd" : "unsubscribe",
-	"session" : "<session_id>|all",
+        "session" : "<session_id>|all",
     }
 
 Monitor Notifications
 +++++++++++++++++++++
-
-* List (response to "list" command)::
-
-    {
-        "sessions" : [
-            "<session-id>",
-            ...
-            "<session-id>"
-        ]
-    }
 
 * Session State::
 

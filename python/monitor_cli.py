@@ -31,11 +31,6 @@ class Commander(cmd.Cmd):
         '''
         self.sock.sendall(line)
 
-    def do_list(self, line):
-        '''Get a list of sessions.
-        '''
-        self.sock.sendall(json.dumps({ 'cmd': 'list'}))
-
     def do_subscribe(self, line):
         '''Subscribe to a session.
 

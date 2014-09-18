@@ -24,11 +24,6 @@ typedef struct CmdEntry {
   CmdHandler_t handler;
 } CmdEntry_t;
 
-static void handler_List(json_object *jso, MonitorInfo_t *mon)
-{
-  bfdLog(LOG_INFO, "Processing 'list' command\n");
-}
-
 static void handler_Subscribe(json_object *jso, MonitorInfo_t *mon)
 {
   bfdLog(LOG_INFO, "Processing 'subscribe' command\n");
@@ -40,7 +35,6 @@ static void handler_Unsubscribe(json_object *jso, MonitorInfo_t *mon)
 }
 
 static const CmdEntry_t cmdTable[] = {
-  { .name = "list",        .handler = handler_List },
   { .name = "subscribe",   .handler = handler_Subscribe },
   { .name = "unsubscribe", .handler = handler_Unsubscribe },
 
