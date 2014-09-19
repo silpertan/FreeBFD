@@ -9,6 +9,7 @@
 #include <arpa/inet.h>
 #include <inttypes.h>
 #include "bfd.h"
+#include "bfdLog.h"
 
 /*
  * Session defaults
@@ -24,9 +25,8 @@ static uint32_t defRequiredMinRx     = BFD_DEFREQUIREDMINRX;
 static void bfdUsage(void)
 {
   fprintf(stderr, "Usage:\n");
-  fprintf(stderr, "\tbfdd [-b] -c connectaddr[:port] [-d] [-l localport] [-m mult] [-r tout] [-t tout]\n");
+  fprintf(stderr, "\tbfdd -c connectaddr[:port] [-d] [-l localport] [-m mult] [-r tout] [-t tout] [-v]\n");
   fprintf(stderr, "Where:\n");
-  fprintf(stderr, "\t-b: toggle debug mode (default %s)\n", BFD_DEFDEBUG ? "on" : "off");
   fprintf(stderr, "\t-c: create session with 'connectaddr' (required option)\n");
   fprintf(stderr, "\t    optionally override dest port (default %d)\n", BFD_DEFDESTPORT);
   fprintf(stderr, "\t-l: listen on 'localport' (default %d)\n", BFD_DEFDESTPORT);
@@ -35,6 +35,7 @@ static void bfdUsage(void)
   fprintf(stderr, "\t-m mult: detect multiplier (default %d)\n", BFD_DEFDETECTMULT);
   fprintf(stderr, "\t-r tout: required min rx (default %d)\n", BFD_DEFREQUIREDMINRX);
   fprintf(stderr, "\t-t tout: desired min tx (default %d)\n", BFD_DEFDESIREDMINTX);
+  fprintf(stderr, "\t-v: increase level of debug output (can be repeated)\n");
   fprintf(stderr, "Signals:\n");
   fprintf(stderr, "\tUSR1: start poll sequence on all demand mode sessions\n");
   fprintf(stderr, "\tUSR2: toggle admin down on all sessions\n");
@@ -58,12 +59,11 @@ int main(int argc, char **argv)
   /* Init random() */
   srandom((unsigned int)time(NULL));
 
+  bfdLogInit();
+
   /* Get command line options */
-  while ((c = getopt(argc, argv, "bc:dhl:m:r:t:")) != -1) {
+  while ((c = getopt(argc, argv, "c:dhl:m:r:t:v")) != -1) {
     switch (c) {
-    case 'b':
-      bfdDebug = !bfdDebug;
-      break;
     case 'c':
       connectaddr = optarg;
       if ((cptr = strchr(connectaddr, ':')) != NULL) {
@@ -109,6 +109,9 @@ int main(int argc, char **argv)
          exit(0);
       }
       break;
+    case 'v':
+      bfdLogMore();
+      break;
     default:
       bfdUsage();
       exit(1);
@@ -120,8 +123,6 @@ int main(int argc, char **argv)
     bfdUsage();
     exit(1);
   }
-
-  openlog(BFD_LOGID, LOG_PID | (bfdDebug ? LOG_PERROR : 0), LOG_DAEMON);
 
   bfdLog(LOG_NOTICE,
          "BFD: demandModeDesired %s, detectMult %d, desiredMinTx %d, requiredMinRx %d\n",

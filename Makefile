@@ -22,6 +22,7 @@ EXE_FILES = bfd bfdd
 SRCS := bfd.c
 SRCS += bfd-monitor.c
 SRCS += tp-timers.c
+SRCS += bfdLog.c
 
 OBJS := $(SRCS:%.c=%.o)
 INCS := $(SRCS:%.c=%.h)

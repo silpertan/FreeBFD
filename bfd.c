@@ -20,10 +20,9 @@
 #include <string.h>
 #include "bfd.h"
 #include "tp-timers.h"
+#include "bfdLog.h"
 
 #define UNUSED(x) { if(x){} }
-
-int bfdDebug = BFD_DEFDEBUG;
 
 static bfdSession *sessionList;                  /* List of active sessions */
 static bfdSession *sessionHash[BFD_HASHSIZE];    /* Find session from discriminator */

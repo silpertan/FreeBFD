@@ -102,13 +102,6 @@ typedef struct _bfdSession {
 #define BFD_DIAG_ADMINDOWN          7
 #define BFD_DIAG_RCONCATPATHDOWNW   8
 
-/* debug and logging support */
-extern int bfdDebug;
-#define BFD_DEFDEBUG            1
-#define BFD_LOGID               "bfdd"
-#define bfdLog(sev, args...)    if ((sev > LOG_DEBUG) || bfdDebug) {\
-                                   syslog(sev, args);\
-                                }
 /* Various constants */
 #define BFD_VERSION                1
 #define BFD_DEFDEMANDMODEDESIRED   0

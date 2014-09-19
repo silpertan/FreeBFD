@@ -10,6 +10,7 @@
 #include "bfd.h"
 #include "tp-timers.h"
 #include "bfd-monitor.h"
+#include "bfdLog.h"
 
 #define BUF_SZ 1024
 
@@ -70,7 +71,10 @@ static void bfdMonitorProcessPkt(char *buf, MonitorInfo_t *mon)
     return;
   }
 
-  json_object *cmd_obj = json_object_object_get(obj, "cmd");
+  json_object *cmd_obj;
+
+  json_object_object_get_ex(obj, "cmd", &cmd_obj);
+
   if (cmd_obj) {
     const char *cmd = json_object_get_string(cmd_obj);
     bfdMonitorProcessCmd(cmd, obj, mon);

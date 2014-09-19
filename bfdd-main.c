@@ -11,6 +11,7 @@
 #include <inttypes.h>
 #include "bfd.h"
 #include "bfd-monitor.h"
+#include "bfdLog.h"
 
 /*
  * Command line usage info
@@ -18,13 +19,14 @@
 static void bfddUsage(void)
 {
   fprintf(stderr, "Usage:\n");
-  fprintf(stderr, "\tbfdd [options] -c config-file\n");
+  fprintf(stderr, "\tbfdd [options] -c config-file [-v]\n");
   fprintf(stderr, "Where:\n");
   fprintf(stderr, "\t-c: load 'config-file' for startup configuration\n");
   fprintf(stderr, "Options:\n");
   fprintf(stderr, "\t-d: Do not run in daemon mode\n");
   fprintf(stderr, "\t-m port: Port monitor server will listen on (default %d)\n",
           DEFAULT_MONITOR_PORT);
+  fprintf(stderr, "\t-v: increase level of debug output (can be repeated)\n");
   fprintf(stderr, "Signals:\n");
   fprintf(stderr, "\tUSR1: start poll sequence on all demand mode sessions\n");
   fprintf(stderr, "\tUSR2: toggle admin down on all sessions\n");
@@ -43,6 +45,8 @@ int main(int argc, char **argv)
   config_t cfg;
   config_setting_t *sns;
 
+  bfdLogInit();
+
   /* Get command line options */
   while ((c = getopt(argc, argv, "c:dm:")) != -1) {
     switch (c) {
@@ -59,6 +63,9 @@ int main(int argc, char **argv)
         exit(1);
       }
       break;
+    case 'v':
+      bfdLogMore();
+      break;
     default:
       bfddUsage();
       exit(1);
@@ -70,8 +77,6 @@ int main(int argc, char **argv)
     bfddUsage();
     exit(1);
   }
-
-  openlog(BFD_LOGID, LOG_PID | (bfdDebug ? LOG_PERROR : 0), LOG_DAEMON);
 
   if (daemon_mode) {
     if (daemon(1, 0) != 0) {
