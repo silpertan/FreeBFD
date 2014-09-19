@@ -18,35 +18,28 @@
 #include "tp-timers.h"
 
 /*
- * Format of control packet.  From section 4)
+ * Format of control packet.  From section 4.1
  */
-typedef struct _bfdCpkt {
-  uint8_t len;
-  uint8_t detectMult;
-  uint8_t flags;
-  uint8_t diag;
+typedef struct {
+  uint8_t  version      : 3;
+  uint8_t  diag         : 5;
+
+  uint8_t  state        : 2;
+  uint8_t  f_poll       : 1;
+  uint8_t  f_final      : 1;
+  uint8_t  f_cpi        : 1;
+  uint8_t  f_auth       : 1;
+  uint8_t  f_demand     : 1;
+  uint8_t  f_multipoint : 1;
+
+  uint8_t  detectMult;
+  uint8_t  len;
   uint32_t myDisc;
   uint32_t yourDisc;
   uint32_t desiredMinTx;
   uint32_t requiredMinRx;
   uint32_t requiredMinEcho;
 } bfdCpkt;
-
-/* Macros for manipulating control packets */
-#define BFD_VERMASK                   0x03
-#define BFD_GETVER(diag)              ((diag) & BFD_VERMASK)
-#define BFD_VERSION                   0
-#define BFD_IHEARYOU                  0x01
-#define BFD_DEMANDBIT                 0x02
-#define BFD_PBIT                      0x04
-#define BFD_FBIT                      0x08
-#define BFD_DIAGNEIGHDOWN             (3 << 3)
-#define BFD_DIAGDETECTTIME            (1 << 3)
-#define BFD_DIAGADMINDOWN             (7 << 3)
-#define BFD_SETIHEARYOU(flags, val)   {if ((val)) flags |= BFD_IHEARYOU;}
-#define BFD_SETDEMANDBIT(flags, val)  {if ((val)) flags |= BFD_DEMANDBIT;}
-#define BFD_SETPBIT(flags, val)       {if ((val)) flags |= BFD_PBIT;}
-#define BFD_SETFBIT(flags, val)       {if ((val)) flags |= BFD_FBIT;}
 
 /*
  * Session state information
@@ -55,37 +48,59 @@ typedef struct _bfdSession {
   struct _bfdSession *listNext;
   struct _bfdSession *hashNext;
   struct _bfdSession *peerNext;
-  uint8_t sessionState;
-  uint8_t remoteHeard;
-  uint8_t localDiag;
-  uint8_t demandModeDesired;
-  uint8_t demandMode;
-  uint8_t pollSeqInProgress;
-  uint8_t polling;
-  uint8_t detectMult;
-  uint8_t upDownSent;
-  uint32_t localDiscr;
-  uint32_t remoteDiscr;
-  uint32_t desiredMinTx;
+
+  /* State Variables specified in RFC 5880 */
+  uint16_t SessionState       : 2;
+  uint16_t RemoteSessionState : 2;
+  uint16_t DemandMode         : 1;  /* we are requesting demand mode */
+  uint16_t RemoteDemandMode   : 1;
+  uint16_t AuthSeqKnown       : 1;
+  uint16_t LocalDiag          : 5;
+
+  uint8_t  DetectMult;
+  uint8_t  AuthType;
+
+  uint32_t LocalDiscr;
+  uint32_t RemoteDiscr;
+  uint32_t DesiredMinTxInterval;
+  uint32_t RequiredMinRxInterval;
+  uint32_t RemoteMinRxInterval;
+  uint32_t RcvAuthSeq;
+  uint32_t XmitAuthSeq;
+
+  /* Other internal session data */
+  uint8_t  DemandModeActive   : 1;  /* as requested by the remote system */
+  uint8_t  pollSeqInProgress  : 1;  /* for sessions in Demand mode */
+  uint8_t  polling            : 1;
+
   uint32_t activeDesiredMinTx;
-  uint32_t upMinTx;
-  uint32_t requiredMinRx;
+  uint32_t sendDesiredMinTx;
   uint32_t detectTime;
-  tpTimer detectTimer;
+  tpTimer  detectTimer;
   uint32_t xmtTime;
-  tpTimer xmtTimer;
-  struct in_addr peer;
+  tpTimer  xmtTimer;
   uint16_t peerPort;
   uint16_t localPort;
+  struct in_addr peer;
   int sock;
 } bfdSession;
 
-/* Macros for session state */
-#define BFD_STATEFAILING    0
+/* Constants for session state */
+#define BFD_STATEADMINDOWN  0
 #define BFD_STATEDOWN       1
-#define BFD_STATEADMINDOWN  2
-#define BFD_STATEINIT       3
-#define BFD_STATEUP         4
+#define BFD_STATEINIT       2
+#define BFD_STATEUP         3
+
+/* Diag code constants */
+#define BFD_NODIAG                  0
+#define BFD_DIAG_DETECTTIMEEXPIRED  1
+#define BFD_DIAG_ECHOFAILED         2
+#define BFD_DIAG_NEIGHBORSAIDDOWN   3
+#define BFD_DIAG_FWDPLANERESTE      4
+#define BFD_DIAG_PATHDOWN           5
+#define BFD_DIAG_CONCATPATHDOWN     6
+#define BFD_DIAG_ADMINDOWN          7
+#define BFD_DIAG_RCONCATPATHDOWNW   8
 
 /* debug and logging support */
 extern int bfdDebug;
@@ -95,11 +110,13 @@ extern int bfdDebug;
                                    syslog(sev, args);\
                                 }
 /* Various constants */
+#define BFD_VERSION                1
 #define BFD_DEFDEMANDMODEDESIRED   0
 #define BFD_DEFDETECTMULT          2
 #define BFD_DEFDESIREDMINTX        100000
 #define BFD_DEFREQUIREDMINRX       50000
-#define BFD_CPKTLEN                24         /* Length of control packet */
+#define BFD_MINPKTLEN              24    /* Minimum length of control packet */
+#define BFD_MINPKTLEN_AUTH         26    /* Minimum length of control packet with Auth section */
 #define BFD_1HOPTTLVALUE           255
 #define BFD_DOWNMINTX              1000000
 #define BFD_HASHSIZE               251        /* Should be prime */
@@ -111,13 +128,7 @@ extern int bfdDebug;
 /* Function prototypes */
 void bfdRcvPkt(int s, void *arg);
 void bfdSendCPkt(bfdSession *bfd, int fbit);
-void bfdDetectTimeout(tpTimer *tim, void *arg);
-void bfdSessionDown(bfdSession *bfd, uint8_t diag);
-void bfdSessionUp(bfdSession *bfd);
-bfdSession *bfdGetSession(bfdCpkt *cp, struct sockaddr_in *sin);
-void bfdSetupRcvSocket(uint16_t localport);
 bool bfdRegisterSession(bfdSession *bfd);
-void bfdXmtTimeout(tpTimer *tim, void *arg);
 void bfdStartXmtTimer(bfdSession *bfd);
 void bfdRmSession(bfdSession *bfd);
 int bfdRmFromList(bfdSession **list, bfdSession *bfd);

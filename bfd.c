@@ -1,12 +1,6 @@
 /*
  * This file implements the Bi-drectional Forwarding Detection (BFD) Protocol
- * with IPv4 single-hop encapsulation, as described in draft-katz-ward-bfd-01.txt
- * and draft-katz-ward-bfd-v4v6-1hop-00.txt.
- *
- * It implements all of the protocol features except for echo packets.  It
- * does not implement much in the way of user interface - just command line
- * options.  In its current state this is really only useful for interoperability
- * testing.
+ * with IPv4 single-hop encapsulation, as described RFC 5880 and RFC 5881.
  *
  * Author:   Tom Phelan
  *           Sonus Networks
@@ -31,9 +25,16 @@
 
 int bfdDebug = BFD_DEFDEBUG;
 
-bfdSession *sessionList;                  /* List of active sessions */
-bfdSession *sessionHash[BFD_HASHSIZE];    /* Find session from discriminator */
-bfdSession *peerHash[BFD_HASHSIZE];       /* Find session from peer address */
+static bfdSession *sessionList;                  /* List of active sessions */
+static bfdSession *sessionHash[BFD_HASHSIZE];    /* Find session from discriminator */
+static bfdSession *peerHash[BFD_HASHSIZE];       /* Find session from peer address */
+
+static bfdSession *bfdGetSession(bfdCpkt *cp, struct sockaddr_in *sin);
+static void bfdXmtTimeout(tpTimer *tim, void *arg);
+static void bfdSessionDown(bfdSession *bfd, uint8_t diag);
+static void bfdSessionUp(bfdSession *bfd);
+static void bfdDetectTimeout(tpTimer *tim, void *arg);
+static void bfdSetupRcvSocket(uint16_t localport);
 
 /*
  * All received packets come through here.
@@ -48,14 +49,17 @@ void bfdRcvPkt(int s, void *arg)
   bfdSession *bfd;
   uint32_t oldXmtTime;
   bool goodTTL = false;
+  bool sendPkt = false;
 
   /* Get packet */
   if ((mlen = recvmsg(s, msg, 0)) < 0) {
     bfdLog(LOG_ERR, "Error receiving from BFD socket: %m\n");
     return;
   }
+
   /* Get source address */
   sin = (struct sockaddr_in *)(msg->msg_name);
+
   /* Get and check TTL */
   for (cm = CMSG_FIRSTHDR(msg);
        cm != NULL;
@@ -69,122 +73,162 @@ void bfdRcvPkt(int s, void *arg)
       break;
     }
   }
+
   if (!goodTTL) {
     bfdLog(LOG_NOTICE, "Received pkt with invalid TTL from %s\n",
            inet_ntoa(sin->sin_addr));
     return;
   }
-  /* Various checks from section 6.5.6 */
-  if (mlen < BFD_CPKTLEN) {
+
+  if (mlen < BFD_MINPKTLEN) {
     bfdLog(LOG_NOTICE, "Received short packet from %s\n", 
            inet_ntoa(sin->sin_addr));
     return;
   }
+
   cp = (bfdCpkt *)(msg->msg_iov->iov_base);
-  if (BFD_GETVER(cp->diag) != BFD_VERSION) {
-    bfdLog(LOG_NOTICE, "Received bad version %d from %s\n", BFD_GETVER(cp->diag),
-           inet_ntoa(sin->sin_addr));
+
+  /* Various checks from RFC 5880, section 6.8.6 */
+
+  if (cp->version != BFD_VERSION) {
+    bfdLog(LOG_NOTICE, "Received bad version %d from %s\n",
+           cp->version, inet_ntoa(sin->sin_addr));
     return;
   }
-  if ((cp->len < BFD_CPKTLEN) || (cp->len > mlen)) {
+
+  if (cp->len < (cp->f_auth ? BFD_MINPKTLEN_AUTH : BFD_MINPKTLEN) ||
+      cp->len > mlen)
+  {
     bfdLog(LOG_NOTICE, "Invalid length %d in control pkt from %s\n", cp->len,
            inet_ntoa(sin->sin_addr));
     return;
   }
+
   if (cp->detectMult == 0) {
     bfdLog(LOG_NOTICE, "Detect Mult is zero in pkt from %s\n",
            inet_ntoa(sin->sin_addr));
     return;
   }
+
+  if (cp->f_multipoint) {
+    bfdLog(LOG_NOTICE, "Unsupported multipoint flag in pkt from %s\n",
+           inet_ntoa(sin->sin_addr));
+    return;
+  }
+
   if (cp->myDisc == 0) {
     bfdLog(LOG_NOTICE, "My discriminator is zero in pkt from %s\n",
            inet_ntoa(sin->sin_addr));
     return;
   }
-  if ((cp->yourDisc == 0) && (cp->flags & BFD_IHEARYOU)) {
-    bfdLog(LOG_NOTICE, "Zero Your Discriminator and non-zero I Hear You in pkt from %s\n",
-           inet_ntoa(sin->sin_addr));
-    return;
-  }
+
   if ((bfd = bfdGetSession(cp, sin)) == NULL) {
     bfdLog(LOG_NOTICE, "Can't find session for ctl pkt from %s\n",
            inet_ntoa(sin->sin_addr));
     return;
   }
-  if (bfd->remoteDiscr == 0) {
-    bfd->remoteDiscr = ntohl(cp->myDisc);
-  }
-  if (bfd->remoteDiscr != ntohl(cp->myDisc)) {
-    bfdLog(LOG_NOTICE, "My Descriptor mismatch in pkt from %s\n",
+
+  if (cp->yourDisc == 0 &&
+      !(bfd->SessionState == BFD_STATEDOWN || bfd->SessionState == BFD_STATEADMINDOWN))
+  {
+    bfdLog(LOG_NOTICE, "Your discriminator is zero in invalid state in pkt from %s\n",
            inet_ntoa(sin->sin_addr));
     return;
   }
-  if (bfd->pollSeqInProgress) {
+
+  if (cp->f_auth) {
+    bfdLog(LOG_NOTICE, "Authentication in use for pkt from %s - UNSUPPORTED\n",
+           inet_ntoa(sin->sin_addr));
+    return;
+  }
+
+  bfd->RemoteDiscr = ntohl(cp->myDisc);
+  bfd->RemoteSessionState = cp->state;
+  bfd->RemoteDemandMode = cp->f_demand;
+  bfd->RemoteMinRxInterval = ntohl(cp->requiredMinRx);
+
+  if (bfd->pollSeqInProgress && cp->f_final) {
     bfdLog(LOG_NOTICE, "Poll sequence concluded for session 0x%x to peer %s\n",
-           bfd->localDiscr, inet_ntoa(bfd->peer));
+           bfd->LocalDiscr, inet_ntoa(bfd->peer));
     bfd->pollSeqInProgress = 0;
     bfd->polling = 0;
     tpStopTimer(&(bfd->xmtTimer));
     tpStopTimer(&(bfd->detectTimer));
   }
-  if (!bfd->demandMode) {
-    if ((cp->flags & BFD_FBIT)) {
-      bfd->polling = 0;
-      bfd->activeDesiredMinTx = bfd->desiredMinTx;
-    }
-    /* Compute detect time */
-    bfd->detectTime = cp->detectMult*((bfd->requiredMinRx > ntohl(cp->desiredMinTx)) ?
-      bfd->requiredMinRx : ntohl(cp->desiredMinTx));
+
+  if (cp->f_final) {
+    bfd->polling = 0;
+    bfd->activeDesiredMinTx = bfd->sendDesiredMinTx;
   }
-  /* State switch from section 6.5.6 */
-  switch (bfd->sessionState) {
-  case (BFD_STATEDOWN):
-    bfd->remoteHeard = 1;
-    if ((cp->flags & BFD_IHEARYOU)) {
-      bfdSessionUp(bfd);
-    } else {
-      bfd->sessionState = BFD_STATEINIT;
-    }
-    break;
-  case (BFD_STATEADMINDOWN):
-    return;
-  case (BFD_STATEINIT):
-    if ((cp->flags & BFD_IHEARYOU)) {
-      bfdSessionUp(bfd);
-      break;
-    } else {
-      return;
-    }
-  case (BFD_STATEUP):
-    if (!(cp->flags & BFD_IHEARYOU)) {
-      bfdLog(LOG_NOTICE, "Neigbor down on session 0x%x with peer %s\n",
-             bfd->localDiscr, inet_ntoa(bfd->peer));
-      bfdSessionDown(bfd, BFD_DIAGNEIGHDOWN);
-    }
-    break;
-  case (BFD_STATEFAILING):
-    if (!(cp->flags & BFD_IHEARYOU)) {
-      bfd->sessionState = BFD_STATEDOWN;
-    }
-    break;
-  }
+
   /* Calculate new transmit time */
   oldXmtTime = bfd->xmtTime;
-  bfd->xmtTime = (bfd->activeDesiredMinTx > ntohl(cp->requiredMinRx)) ?
-    bfd->activeDesiredMinTx : ntohl(cp->requiredMinRx);
-  /* (Re)Calculate demand mode */
-  bfd->demandMode = ((cp->flags & BFD_DEMANDBIT) && bfd->demandModeDesired &&
-                     (bfd->sessionState == BFD_STATEUP));
-  if ((cp->flags & BFD_PBIT)) {
-    bfdSendCPkt(bfd, 1);
+  bfd->xmtTime = (bfd->activeDesiredMinTx > bfd->RemoteMinRxInterval) ?
+                   bfd->activeDesiredMinTx : bfd->RemoteMinRxInterval;
+
+  /* Compute detect time */
+  if (!bfd->DemandModeActive) {
+    uint32_t rcvDMT, selected;
+
+    rcvDMT = ntohl(cp->desiredMinTx);
+    selected = (bfd->RequiredMinRxInterval > rcvDMT) ? bfd->RequiredMinRxInterval : rcvDMT;
+
+    bfd->detectTime = cp->detectMult * selected;
+  } else {
+    uint32_t selected;
+
+    selected = (bfd->activeDesiredMinTx > bfd->RemoteMinRxInterval) ?
+                 bfd->activeDesiredMinTx : bfd->RemoteMinRxInterval;
+
+    bfd->detectTime = bfd->DetectMult * selected;
   }
-  /* If transmit time has changed, and too much time until next xmt, restart */
-  if (oldXmtTime != bfd->xmtTime) {
+
+  /* State logic from section 6.8.6 */
+  if (bfd->SessionState == BFD_STATEADMINDOWN) {
+    return;
+  }
+
+  if (cp->state == BFD_STATEADMINDOWN) {
+    if (bfd->SessionState != BFD_STATEDOWN) {
+      bfdSessionDown(bfd, BFD_DIAG_NEIGHBORSAIDDOWN);
+      sendPkt = true;
+    }
+  } else {
+    if (bfd->SessionState == BFD_STATEDOWN) {
+      if (cp->state == BFD_STATEDOWN) {
+        bfd->SessionState = BFD_STATEINIT;
+      } else if (cp->state == BFD_STATEINIT) {
+        bfdSessionUp(bfd);
+        sendPkt = true;
+      }
+    } else if (bfd->SessionState == BFD_STATEINIT) {
+      if (cp->state == BFD_STATEINIT || cp->state == BFD_STATEUP) {
+        bfdSessionUp(bfd);
+        sendPkt = true;
+      }
+    } else { /* bfd->SessionState == BFD_STATEUP */
+      if (cp->state == BFD_STATEDOWN) {
+        bfdSessionDown(bfd, BFD_DIAG_NEIGHBORSAIDDOWN);
+        sendPkt = true;
+      }
+    }
+  }
+
+  /* (Re)Calculate demand mode */
+  bfd->DemandModeActive = (bfd->RemoteDemandMode &&
+                           bfd->SessionState == BFD_STATEUP &&
+                           bfd->RemoteSessionState == BFD_STATEUP);
+
+  if (cp->f_poll || sendPkt) {
+    bfdSendCPkt(bfd, cp->f_poll);
+  } else if (oldXmtTime != bfd->xmtTime) {
+    /* If new xmtTime is before next expiry */
     if (tpGetTimeRemaining(&(bfd->xmtTimer)) > (bfd->xmtTime*9)/10) {
       bfdStartXmtTimer(bfd);
     }
   }
-  if (!bfd->demandMode) {
+
+  if (!bfd->DemandModeActive) {
     /* Restart detection timer (packet received) */
     tpStartUsTimer(&(bfd->detectTimer), bfd->detectTime, bfdDetectTimeout, bfd);
   } else {
@@ -197,25 +241,26 @@ void bfdRcvPkt(int s, void *arg)
 /*
  * Called on detection timeout (no ctl packets from remote system
  */
-void bfdDetectTimeout(tpTimer *tim, void *arg)
+static void bfdDetectTimeout(tpTimer *tim, void *arg)
 {
   bfdSession *bfd = (bfdSession *)arg;
 
   UNUSED(tim)
 
   bfdLog(LOG_NOTICE, "Detect timeout on session 0x%x with peer %s, in state %d\n",
-         bfd->localDiscr, inet_ntoa(bfd->peer), bfd->sessionState);
-  switch (bfd->sessionState) {
+         bfd->LocalDiscr, inet_ntoa(bfd->peer), bfd->SessionState);
+  switch (bfd->SessionState) {
   case BFD_STATEUP:
   case BFD_STATEINIT:
-    bfdSessionDown(bfd, BFD_DIAGDETECTTIME);
+    bfdSessionDown(bfd, BFD_DIAG_DETECTTIMEEXPIRED);
+    bfdSendCPkt(bfd, 0);
     /* Session down, restart detect timer so we can clean up later */
     tpStartUsTimer(&(bfd->detectTimer), bfd->detectTime,
                    bfdDetectTimeout, bfd);
     break;
   default:
     /* Second detect time expiration, zero remote discr (section 6.5.1) */
-    bfd->remoteDiscr = 0;
+    bfd->RemoteDiscr = 0;
     break;
   }
 }
@@ -223,45 +268,42 @@ void bfdDetectTimeout(tpTimer *tim, void *arg)
 /*
  * Bring session down
  */
-void bfdSessionDown(bfdSession *bfd, uint8_t diag)
+static void bfdSessionDown(bfdSession *bfd, uint8_t diag)
 {
-  bfd->localDiag = diag;
-  bfd->remoteHeard = 0;
-  bfd->sessionState = BFD_STATEFAILING;
-  bfd->desiredMinTx = BFD_DOWNMINTX;
-  bfd->activeDesiredMinTx = BFD_DOWNMINTX;
+  uint32_t selectedMin;
+
+  selectedMin = BFD_DOWNMINTX > bfd->DesiredMinTxInterval ?
+                  BFD_DOWNMINTX : bfd->DesiredMinTxInterval;
+
+  bfd->LocalDiag = (uint8_t)(diag & 0x1f);
+  bfd->SessionState = BFD_STATEDOWN;
+  bfd->sendDesiredMinTx = selectedMin;
+  bfd->activeDesiredMinTx = selectedMin;
   bfd->polling = 0;
   bfd->pollSeqInProgress = 0;
-  bfd->demandMode = 0;
-  if (!bfd->upDownSent) {
-    bfd->upDownSent = 1;
-    bfdSendCPkt(bfd, 0);
-  }
-  bfdLog(LOG_WARNING, "Session 0x%x down to peer %s\n", bfd->localDiscr,
+  bfd->DemandModeActive = 0;
+
+  bfdLog(LOG_WARNING, "Session 0x%x down to peer %s\n", bfd->LocalDiscr,
          inet_ntoa(bfd->peer));
 }
 
 /*
  * Bring session up
  */
-void bfdSessionUp(bfdSession *bfd)
+static void bfdSessionUp(bfdSession *bfd)
 {
-  bfd->sessionState = BFD_STATEUP;
-  bfd->desiredMinTx = bfd->upMinTx;
+  bfd->SessionState = BFD_STATEUP;
+  bfd->sendDesiredMinTx = bfd->DesiredMinTxInterval;
   bfd->polling = 1;
-  if (!bfd->upDownSent) {
-    bfd->upDownSent = 1;
-    /* Nothing sent since last xmt time, send immediate indication */
-    bfdSendCPkt(bfd, 0);
-  }
-  bfdLog(LOG_NOTICE, "Session 0x%x up to peer %s\n", bfd->localDiscr,
+
+  bfdLog(LOG_NOTICE, "Session 0x%x up to peer %s\n", bfd->LocalDiscr,
          inet_ntoa(bfd->peer));
 }
 
 /*
  * Find the session corresponding to an incoming ctl packet
  */
-bfdSession *bfdGetSession(bfdCpkt *cp, struct sockaddr_in *sin)
+static bfdSession *bfdGetSession(bfdCpkt *cp, struct sockaddr_in *sin)
 {
   bfdSession *bfd;
   uint32_t hkey;
@@ -270,7 +312,7 @@ bfdSession *bfdGetSession(bfdCpkt *cp, struct sockaddr_in *sin)
     /* Your discriminator not zero - use it to find session */
     hkey = BFD_MKHKEY(ntohl(cp->yourDisc));
     for (bfd = sessionHash[hkey]; bfd != NULL; bfd = bfd->hashNext) {
-      if (bfd->localDiscr == ntohl(cp->yourDisc)) {
+      if (bfd->LocalDiscr == ntohl(cp->yourDisc)) {
         return(bfd);
       }
     }
@@ -299,31 +341,37 @@ void bfdSendCPkt(bfdSession *bfd, int fbit)
   bfdCpkt cp;
   struct sockaddr_in sin;
 
-  /* Set fields according to section 6.5.7 */
-  cp.diag = bfd->localDiag;
-  cp.flags = 0;
-  BFD_SETIHEARYOU(cp.flags, bfd->remoteHeard);
-  BFD_SETDEMANDBIT(cp.flags, bfd->demandModeDesired);
-  BFD_SETPBIT(cp.flags, bfd->polling);
-  BFD_SETFBIT(cp.flags, fbit);
-  cp.detectMult = bfd->detectMult;
-  cp.len = BFD_CPKTLEN;
-  cp.myDisc = htonl(bfd->localDiscr);
-  cp.yourDisc = htonl(bfd->remoteDiscr);
-  cp.desiredMinTx = htonl(bfd->desiredMinTx);
-  cp.requiredMinRx = htonl(bfd->requiredMinRx);
+  /* Set fields according to section 6.8.7 */
+  cp.version = BFD_VERSION;
+  cp.state = bfd->SessionState;
+  cp.diag = bfd->LocalDiag;
+  cp.f_demand = bfd->DemandMode ? 1 : 0;
+  cp.f_poll = bfd->polling ? 1 : 0;
+  cp.f_final = fbit ? 1 : 0;
+  cp.f_cpi = 0;
+  cp.f_auth = 0;
+  cp.f_multipoint = 0;
+  cp.detectMult = bfd->DetectMult;
+  cp.len = BFD_MINPKTLEN;
+  cp.myDisc = htonl(bfd->LocalDiscr);
+  cp.yourDisc = htonl(bfd->RemoteDiscr);
+  cp.desiredMinTx = htonl(bfd->sendDesiredMinTx);
+  cp.requiredMinRx = htonl(bfd->RequiredMinRxInterval);
   cp.requiredMinEcho = 0;
   sin.sin_family = AF_INET;
   sin.sin_addr = bfd->peer;
   sin.sin_port = htons(bfd->peerPort);
-  if (sendto(bfd->sock, &cp, BFD_CPKTLEN, 0, (struct sockaddr *)&sin,
+  if (sendto(bfd->sock, &cp, BFD_MINPKTLEN, 0, (struct sockaddr *)&sin,
              sizeof(struct sockaddr_in)) < 0) {
     bfdLog(LOG_ERR, "Error sending control pkt: %m\n");
   }
+
+  /* Restart the timer for next time */
+  bfdStartXmtTimer(bfd);
 }
 
 /* Buffer and msghdr for received packets */
-static uint8_t msgbuf[BFD_CPKTLEN];
+static uint8_t msgbuf[BFD_MINPKTLEN];
 static struct iovec msgiov = {
   &(msgbuf[0]),
   sizeof(msgbuf)
@@ -343,7 +391,7 @@ static struct msghdr msghdr = {
 /*
  * Create and Register socket to receive control messages
  */
-void bfdSetupRcvSocket(uint16_t localport)
+static void bfdSetupRcvSocket(uint16_t localport)
 {
   struct sockaddr_in sin;
   int ttlval = BFD_1HOPTTLVALUE;
@@ -388,6 +436,7 @@ bool bfdRegisterSession(bfdSession *bfd)
   uint32_t hkey;
   static uint16_t srcPort = BFD_SRCPORTINIT;
   int ttlval = BFD_1HOPTTLVALUE;
+  uint32_t selectedMin;
 
   /* Make UDP socket to receive control packets */
   bfdSetupRcvSocket((uint16_t)bfd->localPort);
@@ -424,15 +473,20 @@ bool bfdRegisterSession(bfdSession *bfd)
     if (srcPort >= BFD_SRCPORTMAX) srcPort = BFD_SRCPORTINIT;
     sin.sin_port = htons(srcPort++);
   } while (bind(bfd->sock, (struct sockaddr *)&sin, sizeof(sin)) < 0);
+
+  selectedMin = BFD_DOWNMINTX > bfd->DesiredMinTxInterval ?
+                  BFD_DOWNMINTX : bfd->DesiredMinTxInterval;
+
   /* Initialize the session */
-  bfd->sessionState = BFD_STATEFAILING;
-  bfd->localDiscr = (uint32_t)((uintptr_t)bfd & 0xffffffff);
-  bfd->desiredMinTx = BFD_DOWNMINTX;
-  bfd->activeDesiredMinTx = BFD_DOWNMINTX;
-  bfd->xmtTime = BFD_DOWNMINTX;
+  bfd->SessionState = BFD_STATEDOWN;
+  bfd->LocalDiscr = (uint32_t)((uintptr_t)bfd & 0xffffffff);
+  bfd->sendDesiredMinTx = selectedMin;
+  bfd->activeDesiredMinTx = selectedMin;
+  bfd->xmtTime = selectedMin;
   bfd->listNext = sessionList;
+  bfd->LocalDiag = 0;
   sessionList = bfd;
-  hkey = BFD_MKHKEY(bfd->localDiscr);
+  hkey = BFD_MKHKEY(bfd->LocalDiscr);
   bfd->hashNext = sessionHash[hkey];
   sessionHash[hkey] = bfd;
   hkey = BFD_MKHKEY(bfd->peer.s_addr);
@@ -441,25 +495,21 @@ bool bfdRegisterSession(bfdSession *bfd)
   /* Start transmitting control packets */
   bfdXmtTimeout(&(bfd->xmtTimer), bfd);
   bfdLog(LOG_NOTICE, "Created new session 0x%x with peer %s\n",
-         bfd->localDiscr, inet_ntoa(bfd->peer));
+         bfd->LocalDiscr, inet_ntoa(bfd->peer));
   return true;
 }
 
 /*
  * Called for each transmission interval timeout
  */
-void bfdXmtTimeout(tpTimer *tim, void *arg)
+static void bfdXmtTimeout(tpTimer *tim, void *arg)
 {
   bfdSession *bfd = (bfdSession *)arg;
 
   UNUSED(tim)
 
-  /* Allow intra-interval control packets again */
-  bfd->upDownSent = 0;
   /* Send the scheduled control packet */
   bfdSendCPkt(bfd, 0);
-  /* Restart the timer for next time */
-  bfdStartXmtTimer(bfd);
 }
 
 /*
@@ -471,11 +521,11 @@ void bfdStartXmtTimer(bfdSession *bfd)
   uint32_t maxpercent;
 
   /*
-   * From section 6.5.2: trasmit interval should be randomly jittered between
-   * 75% and 100% of nominal value, unless detectMult is 1, then should be
+   * From section 6.8.7: trasmit interval should be randomly jittered between
+   * 75% and 100% of nominal value, unless DetectMult is 1, then should be
    * between 75% and 90%.
    */
-  maxpercent = (bfd->detectMult == 1) ? 16 : 26;
+  maxpercent = (bfd->DetectMult == 1) ? 16 : 26;
   jitter = (bfd->xmtTime*(75 + ((uint32_t)random() % maxpercent)))/100;
   tpStartUsTimer(&(bfd->xmtTimer), jitter, bfdXmtTimeout, bfd);
 }
@@ -487,16 +537,16 @@ void bfdRmSession(bfdSession *bfd)
 {
   uint32_t hkey;
 
-  hkey = BFD_MKHKEY(bfd->localDiscr);
+  hkey = BFD_MKHKEY(bfd->LocalDiscr);
   if (bfdRmFromList(&(sessionHash[hkey]), bfd) < 0) {
-    bfdLog(LOG_ERR, "Can't find session 0x%x in session hash\n", bfd->localDiscr);
+    bfdLog(LOG_ERR, "Can't find session 0x%x in session hash\n", bfd->LocalDiscr);
   }
   hkey = BFD_MKHKEY(bfd->peer.s_addr);
   if (bfdRmFromList(&(peerHash[hkey]), bfd) < 0) {
-    bfdLog(LOG_ERR, "Can't find session 0x%x in peer hash\n", bfd->localDiscr);
+    bfdLog(LOG_ERR, "Can't find session 0x%x in peer hash\n", bfd->LocalDiscr);
   }
   if (bfdRmFromList(&sessionList, bfd) < 0) {
-    bfdLog(LOG_ERR, "Can't find session 0x%x in session list\n", bfd->localDiscr);
+    bfdLog(LOG_ERR, "Can't find session 0x%x in session list\n", bfd->LocalDiscr);
   }
   tpStopTimer(&(bfd->xmtTimer));
   tpStopTimer(&(bfd->detectTimer));
@@ -512,7 +562,7 @@ int bfdRmFromList(bfdSession **list, bfdSession *bfd)
   bfdSession *tmp;
 
   for (tmp = *list; tmp; tmp = tmp->hashNext) {
-    if (tmp->localDiscr == bfd->localDiscr) {
+    if (tmp->LocalDiscr == bfd->LocalDiscr) {
       if (prev) {
         prev->hashNext = bfd->hashNext;
       } else {
@@ -536,13 +586,13 @@ void bfdStartPollSequence(int sig)
   UNUSED(sig)
 
   for (bfd = sessionList; bfd != NULL; bfd = bfd->listNext) {
-    if (bfd->demandMode && (!bfd->pollSeqInProgress)) {
+    if (bfd->DemandMode && (!bfd->pollSeqInProgress)) {
       bfd->pollSeqInProgress = 1;
       bfd->polling = 1;
       bfdXmtTimeout(&(bfd->xmtTimer), bfd);
       tpStartUsTimer(&(bfd->detectTimer), bfd->detectTime, bfdDetectTimeout, bfd);
       bfdLog(LOG_NOTICE, "Poll sequence started for session 0x%x to peer %s, timer %d\n",
-             bfd->localDiscr, inet_ntoa(bfd->peer), bfd->detectTime);
+             bfd->LocalDiscr, inet_ntoa(bfd->peer), bfd->detectTime);
     }
   }
 }
@@ -558,27 +608,30 @@ void bfdToggleAdminDown(int sig)
   UNUSED(sig)
 
   for (bfd = sessionList; bfd != NULL; bfd = bfd->listNext) {
-    if (bfd->sessionState == BFD_STATEADMINDOWN) {
+    if (bfd->SessionState == BFD_STATEADMINDOWN) {
       /* Session is already ADMINDOWN, enable it */
-      bfd->sessionState = BFD_STATEFAILING;
+      bfd->SessionState = BFD_STATEDOWN;
       bfdXmtTimeout(&(bfd->xmtTimer), bfd);
-      bfdLog(LOG_NOTICE, "Session 0x%x to peer %s enabled\n", bfd->localDiscr,
+      bfdLog(LOG_NOTICE, "Session 0x%x to peer %s enabled\n", bfd->LocalDiscr,
              inet_ntoa(bfd->peer));
     } else {
+      uint32_t selectedMin;
+
+      selectedMin = BFD_DOWNMINTX > bfd->DesiredMinTxInterval ?
+                      BFD_DOWNMINTX : bfd->DesiredMinTxInterval;
+
       /* Disable session */
-      bfd->sessionState = BFD_STATEADMINDOWN;
-      bfd->remoteHeard = 0;
+      bfd->SessionState = BFD_STATEADMINDOWN;
       bfd->polling = 0;
-      bfd->localDiag = BFD_DIAGADMINDOWN;
-      bfd->demandMode = 0;
+      bfd->LocalDiag = BFD_DIAG_ADMINDOWN;
+      bfd->DemandModeActive = 0;
       bfd->pollSeqInProgress = 0;
-      bfd->upDownSent = 0;
-      bfd->remoteDiscr = 0;
-      bfd->desiredMinTx = BFD_DOWNMINTX;
-      bfd->activeDesiredMinTx = BFD_DOWNMINTX;
+      bfd->RemoteDiscr = 0;
+      bfd->sendDesiredMinTx = selectedMin;
+      bfd->activeDesiredMinTx = selectedMin;
       tpStopTimer(&(bfd->xmtTimer));
       tpStopTimer(&(bfd->detectTimer));
-      bfdLog(LOG_NOTICE, "Session 0x%x to peer %s disabled\n", bfd->localDiscr,
+      bfdLog(LOG_NOTICE, "Session 0x%x to peer %s disabled\n", bfd->LocalDiscr,
              inet_ntoa(bfd->peer));
     }
   }

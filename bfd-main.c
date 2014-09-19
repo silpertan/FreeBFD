@@ -160,14 +160,13 @@ int main(int argc, char **argv)
 
   memset(bfd, 0, sizeof(bfdSession));
 
-  bfd->demandModeDesired = defDemandModeDesired;
-  bfd->detectMult        = defDetectMult;
-  bfd->upMinTx           = defDesiredMinTx;
-  bfd->requiredMinRx     = defRequiredMinRx;
-  bfd->peer              = peeraddr;
-  bfd->peerPort          = peerPort;
-  bfd->localPort         = localport;
-  // bfd->remoteDiscr = 0;
+  bfd->DemandMode            = (uint8_t)(defDemandModeDesired & 0x1);
+  bfd->DetectMult            = defDetectMult;
+  bfd->DesiredMinTxInterval  = defDesiredMinTx;
+  bfd->RequiredMinRxInterval = defRequiredMinRx;
+  bfd->peer                  = peeraddr;
+  bfd->peerPort              = peerPort;
+  bfd->localPort             = localport;
 
   if (!bfdRegisterSession(bfd)) {
     bfdLog(LOG_ERR, "Can't creating initial session: %m\n");
