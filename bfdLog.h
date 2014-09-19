@@ -6,7 +6,7 @@
  *   - Info (LOG_INFO)
  *   - Debug (LOG_DEBUG)
  *
- * The default output level is LOG_WARNING. Calling bfdLogMore() increases
+ * The default output level is LOG_NOTICE. Calling bfdLogMore() increases
  * the output level by one step (e.g. LOG_WARNING -> LOG_NOTICE).
  *
  ****************************************************************************/

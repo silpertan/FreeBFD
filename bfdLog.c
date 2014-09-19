@@ -8,7 +8,7 @@
 #define BFD_LOGFLAG LOG_PERROR
 #endif 
 
-static int sMaxLevel = LOG_WARNING;
+static int sMaxLevel = LOG_NOTICE;
 
 void bfdLogInit(void)
 {
