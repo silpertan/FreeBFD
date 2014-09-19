@@ -8,7 +8,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <libconfig.h>
+#include <inttypes.h>
 #include "bfd.h"
+#include "bfd-monitor.h"
 
 /*
  * Command line usage info
@@ -16,9 +18,13 @@
 static void bfddUsage(void)
 {
   fprintf(stderr, "Usage:\n");
-  fprintf(stderr, "\tbfdd -c config-file\n");
+  fprintf(stderr, "\tbfdd [options] -c config-file\n");
   fprintf(stderr, "Where:\n");
   fprintf(stderr, "\t-c: load 'config-file' for startup configuration\n");
+  fprintf(stderr, "Options:\n");
+  fprintf(stderr, "\t-d: Do not run in daemon mode\n");
+  fprintf(stderr, "\t-m port: Port monitor server will listen on (default %d)\n",
+          DEFAULT_MONITOR_PORT);
   fprintf(stderr, "Signals:\n");
   fprintf(stderr, "\tUSR1: start poll sequence on all demand mode sessions\n");
   fprintf(stderr, "\tUSR2: toggle admin down on all sessions\n");
@@ -31,15 +37,27 @@ int main(int argc, char **argv)
 {
   int c;
   char *configFile = NULL;
+  int daemon_mode = 1;
+  uint16_t monitor_port = DEFAULT_MONITOR_PORT;
 
   config_t cfg;
   config_setting_t *sns;
 
   /* Get command line options */
-  while ((c = getopt(argc, argv, "c:")) != -1) {
+  while ((c = getopt(argc, argv, "c:dm:")) != -1) {
     switch (c) {
     case 'c':
       configFile = optarg;
+      break;
+    case 'd':
+      daemon_mode = 0;
+      break;
+    case 'm':
+      if (sscanf(optarg, "%" SCNu16, &monitor_port) != 1) {
+        fprintf(stderr, "Expected integer for monitor port.\n");
+        bfddUsage();
+        exit(1);
+      }
       break;
     default:
       bfddUsage();
@@ -55,9 +73,11 @@ int main(int argc, char **argv)
 
   openlog(BFD_LOGID, LOG_PID | (bfdDebug ? LOG_PERROR : 0), LOG_DAEMON);
 
-  if (daemon(1, 0) != 0) {
-    bfdLog(LOG_ERR, "Unable to daemonize!");
-    exit(1);
+  if (daemon_mode) {
+    if (daemon(1, 0) != 0) {
+      bfdLog(LOG_ERR, "Unable to daemonize!");
+      exit(1);
+    }
   }
 
   /* Init random() */
@@ -193,6 +213,8 @@ int main(int argc, char **argv)
   }
 
   config_destroy(&cfg);
+
+  bfdMonitorSetupServer(monitor_port);
 
   /* Wait for events */
   tpDoEventLoop();
