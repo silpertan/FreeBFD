@@ -1,12 +1,5 @@
-/*
- * This file implements the Bi-drectional Forwarding Detection (BFD) Protocol
+/* This file implements the Bi-drectional Forwarding Detection (BFD) Protocol
  * with IPv4 single-hop encapsulation, as described RFC 5880 and RFC 5881.
- *
- * Author:   Tom Phelan
- *           Sonus Networks
- *           tphelan@sonusnet.com
- *
- * Copyright (c) 2003 Sonus Networks, Inc.
  */
 
 #include <stdlib.h>

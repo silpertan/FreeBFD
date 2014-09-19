@@ -1,3 +1,65 @@
+This project started with a contribution of code implementing BFD
+version 0 (based on an early draft of the BFD RFCs) from Tom Phelan of
+Sonus Networks.  The initial checkin at
+    https://github.com/silpertan/FreeBFD
+consisted of exactly this contributed code.  The source code files
+were marked with the following copyright notice:
+
+/*
+ * Author:   Tom Phelan
+ *           Sonus Networks
+ *           tphelan@sonusnet.com
+ *
+ * Copyright (c) 2003 Sonus Networks, Inc.
+ */
+
+The original code statically linked version 1.4.0 of the AVL library
+which was licensed under the GPLv2.
+
+A short discussion with Tom Phelan also clarified acceptable use of the
+original codebase:
+
+    -------------------    -------------------    -------------------
+
+Date: Thu, 4 Sep 2014 10:26:56 -0400
+Subject: Re: BFD Source Code
+From: Tom Phelan
+To: Arthur Davis
+
+Hi Arthur,
+
+Well, this has been dormant for some time! You can use this code any way
+you want. Good luck :-).
+
+Tom P.
+
+
+On Thu, Sep 4, 2014 at 10:06 AM, Arthur Davis wrote:
+
+> I'm interested in working with BFD in the context of OpenWrt (
+> https://openwrt.org/ ) as well as an internal project for the company
+> where I work.
+>
+> The code at http://www.phelan-4.com/bfd/ is listed as a "Public Project",
+> but I'm not a lawyer and am not sure if that means it's considered public
+> domain or still protected in some way that might affect what I can do with
+> it.
+>
+> Can you clarify this?  It looks like it may be a good jumping off point
+> for both of these projects.
+>
+> Thanks,
+> Arthur Davis
+>
+
+    -------------------    -------------------    -------------------
+
+Copyright ownership of all subsequent contributions is recorded in Git
+logs.  The project is released under the GPLv3 which is reproduced
+below.
+
+    -------------------    -------------------    -------------------
+
                     GNU GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
 

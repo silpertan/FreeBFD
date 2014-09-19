@@ -1,11 +1,4 @@
-/*
- * Definitions for tp-timers package.
- *
- * Author:  Tom Phelan
- *          Sonus Networks
- *          tphelan@sonusnet.com
- *
- * Copyright (c) 2003 Sonus Networks, Inc.
+/* Definitions for tp-timers package.
  */
 
 #ifndef _TP_TIMERS_H_

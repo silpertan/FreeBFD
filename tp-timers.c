@@ -1,5 +1,4 @@
-/*
- * Timer and socket support routines.  This module uses an event
+/* Timer and socket support routines.  This module uses an event
  * model.  There are two types of objects that generate events - timers and sockets.
  * Timers generate an event when they expire.  Sockets generate an event when there
  * is data available to read.
@@ -8,12 +7,6 @@
  * actor routines (using timSetSktActor), optionally start timers, and then call
  * timDoEventLoop.  timDoEventLoop never returns, but calls the appropriate socket
  * actor or timer actor routines when the events occur.
- *
- * Author:  Tom Phelan
- *          Sonus Networks
- *          tphelan@sonusnet.com
- *
- * Copyright (c) 2003 Sonus Networks, Inc.
  */
 
 #include <unistd.h>

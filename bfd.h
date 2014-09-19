@@ -1,11 +1,4 @@
-/*
- * Include file for Bi-directional Forwarding Detection (BFD) Protocol.
- *
- * Author:  Tom Phelan
- *          Sonus Networks
- *          tphelan@sonusnet.com
- *
- * Copyright (c) 2003 Sonus Networks, Inc.
+/* Include file for Bi-directional Forwarding Detection (BFD) Protocol.
  */
 
 #ifndef _BFD_H_
