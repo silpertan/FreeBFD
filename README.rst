@@ -57,8 +57,6 @@ if the number of subscriptions to the session drops to zero.
 Questions & Concerns
 ++++++++++++++++++++
 
-* What is a "session-id"? How do we define/specify/create it?
-
 * Does it make sense to destory sessions if there are no
   subscriptions? How would that work in the data center if nothing is
   subscribed to dynamically created sessions?
@@ -66,26 +64,52 @@ Questions & Concerns
 Monitor Commands
 ++++++++++++++++
 
+These are sent from the monitor application to the **bfd** daemon.
+
 * Subscribe to session(s)::
 
     {
-        "cmd" : "subscribe",
-        "session" : "<session_id>|all",
+        "MsgType" : "Subscribe",
+        "SessionID" : {
+            "PeerIP" : "<ip-addr>",
+            "LocalIP" : "<ip-addr>",
+            "PeerPort" : <int>,   // Optional: Defaults to 3784
+            "LocalPort" : <int>,  // Optional: Defaults to 3784
+        },
+        // The following are optional.
+        "SessionOpts" : {
+            "DetectMult" : <int>,
+            "RequiredMinRxInterval" : <int>,
+            "DesiredMinTxInterval" : <int>,
+        }
     }
 
 * Unsubscribe from session(s)::
 
     {
-        "cmd" : "unsubscribe",
-        "session" : "<session_id>|all",
+        "MsgType" : "Unsubscribe",
+        "SessionID" : {
+            "PeerIP" : "<ip-addr>",
+            "LocalIP" : "<ip-addr>",
+            "PeerPort" : <int>,   // Optional: Defaults to 3784
+            "LocalPort" : <int>,  // Optional: Defaults to 3784
+        }
     }
 
 Monitor Notifications
 +++++++++++++++++++++
 
+These are sent from the **bfd** daemon to the monitor applications.
+
 * Session State::
 
     {
-        "session" : "<session-id>",
-        "state"   : "created|up|down|expired|destroyed"
+        "MsgType" : "Notify",
+        "SessionID" : {
+            "PeerIP" : "<ip-addr>",
+            "LocalIP" : "<ip-addr>",
+            "PeerPort" : <int>,   // Optional: Defaults to 3784
+            "LocalPort" : <int>,  // Optional: Defaults to 3784
+        },
+        "State" : "AdminDown|Down|Init|Up"
     }
