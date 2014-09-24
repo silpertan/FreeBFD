@@ -14,6 +14,54 @@ CTRL_ADDR = ('localhost', 5643)
 
 READ_ONLY = select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR
 
+class SessionID(object):
+    def __init__(self, peer, local=None, peerPort=None, localPort=None):
+        self.peer = peer
+        self.local = local
+        self.peerPort = peerPort
+        self.localPort = localPort
+
+    def to_port(self, port):
+        try:
+            p = int(port)
+        except ValueError:
+            p = 0
+
+        if p < 0:
+            p = 0
+        if p > 0xFFFF:
+            p = 0xFFFF
+
+        return p
+
+    def PeerPort(self):
+        return self.to_port(self.peerPort)
+
+    def LocalPort(self):
+        return self.to_port(self.localPort)
+
+
+class MonitorMsg(object):
+    def __init__(self, msgtype, sess_id):
+        self.msg = {
+            'MsgType': msgtype,
+            'SessionID' : {
+                'PeerIP' : sess_id.peer
+            }
+        }
+
+        if sess_id.local is not None:
+            self.msg['SessionID']['LocalIP'] = sess_id.local
+
+        if sess_id.peerPort is not None:
+            self.msg['SessionID']['PeerPort'] = sess_id.PeerPort()
+
+        if sess_id.localPort is not None:
+            self.msg['SessionID']['LocalPort'] = sess_id.LocalPort()
+
+    def to_json(self):
+        return json.dumps(self.msg)
+
 class Commander(cmd.Cmd):
     def __init__(self, sock):
         cmd.Cmd.__init__(self, stdout=sys.stdout)
@@ -34,26 +82,20 @@ class Commander(cmd.Cmd):
     def do_subscribe(self, line):
         '''Subscribe to a session.
 
-        Argument can be '<session_id>' or 'all'.
+        Argument can be '<peer-ip> [<local-ip> [<peer-port> [<local-port>]]]'.
         '''
-        sess_id = line.split()[0]
-        cmd = {
-            'cmd': 'subscribe',
-            'session' : sess_id,
-        }
-        self.sock.sendall(json.dumps(cmd))
+        argv = line.split()
+        msg = MonitorMsg('Subscribe', SessionID(*argv))
+        self.sock.sendall(msg.to_json())
 
     def do_unsubscribe(self, line):
         '''Unsubscribe from a session.
 
-        Argument can be '<session_id>' or 'all'.
+        Argument can be '<peer-ip> [<local-ip> [<peer-port> [<local-port>]]]'.
         '''
-        sess_id = line.split()[0]
-        cmd = {
-            'cmd': 'unsubscribe',
-            'session' : sess_id,
-        }
-        self.sock.sendall(json.dumps(cmd))
+        argv = line.split()
+        msg = MonitorMsg('Unsubscribe', SessionID(*argv))
+        self.sock.sendall(msg.to_json())
 
 
 def main():
