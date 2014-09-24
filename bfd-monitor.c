@@ -14,9 +14,59 @@
 
 #define BUF_SZ 1024
 
+typedef struct SessionID {
+  uint16_t localPort;
+  uint16_t peerPort;
+  const char *localIP;
+  const char *peerIP;
+} SessionID_t;
+
 typedef struct MonitorInfo {
   int sock;
+  SessionID_t sid;
 } MonitorInfo_t;
+
+static void bfdMonitorProcessSessionId(json_object *jso, SessionID_t *sid)
+{
+  json_object *sid_jso;
+  json_object *item;
+
+  json_object_object_get_ex(jso, "SessionID", &sid_jso);
+  if (!sid_jso) {
+    bfdLog(LOG_ERR, "Missing 'SessionID' in json packet\n");
+    return;
+  }
+
+  sid->peerIP = NULL;
+  json_object_object_get_ex(sid_jso, "PeerIP", &item);
+  if (item) {
+    sid->peerIP = json_object_get_string(item);
+  }
+
+  sid->localIP = NULL;
+  json_object_object_get_ex(sid_jso, "LocalIP", &item);
+  if (item) {
+    sid->localIP = json_object_get_string(item);
+  }
+
+  sid->peerPort = 0;
+  json_object_object_get_ex(sid_jso, "PeerPort", &item);
+  if (item) {
+    sid->peerPort = (uint16_t)(json_object_get_int(item) & 0xffff);
+  }
+
+  sid->localPort = 0;
+  json_object_object_get_ex(sid_jso, "LocalPort", &item);
+  if (item) {
+    sid->localPort = (uint16_t)(json_object_get_int(item) & 0xffff);
+  }
+
+  bfdLog(LOG_INFO, "SessionID gathered:\n");
+  bfdLog(LOG_INFO, "  PeerIP is '%s'\n", sid->peerIP);
+  bfdLog(LOG_INFO, "  LocalIP is '%s'\n", sid->localIP);
+  bfdLog(LOG_INFO, "  PeerPort is '%d'\n", sid->peerPort);
+  bfdLog(LOG_INFO, "  LocalPort is '%d'\n", sid->localPort);
+}
 
 typedef void (*CmdHandler_t)(json_object *jso, MonitorInfo_t *mon);
 
@@ -27,17 +77,19 @@ typedef struct CmdEntry {
 
 static void handler_Subscribe(json_object *jso, MonitorInfo_t *mon)
 {
-  bfdLog(LOG_INFO, "Processing 'subscribe' command\n");
+  bfdLog(LOG_INFO, "Processing 'Subscribe' command\n");
+  bfdMonitorProcessSessionId(jso, &mon->sid);
 }
 
 static void handler_Unsubscribe(json_object *jso, MonitorInfo_t *mon)
 {
-  bfdLog(LOG_INFO, "Processing 'unsubscribe' command\n");
+  bfdLog(LOG_INFO, "Processing 'Unsubscribe' command\n");
+  bfdMonitorProcessSessionId(jso, &mon->sid);
 }
 
 static const CmdEntry_t cmdTable[] = {
-  { .name = "subscribe",   .handler = handler_Subscribe },
-  { .name = "unsubscribe", .handler = handler_Unsubscribe },
+  { .name = "Subscribe",   .handler = handler_Subscribe },
+  { .name = "Unsubscribe", .handler = handler_Unsubscribe },
 
   /* Terminator */
   { .name = NULL, .handler = NULL }
@@ -73,13 +125,13 @@ static void bfdMonitorProcessPkt(char *buf, MonitorInfo_t *mon)
 
   json_object *cmd_obj;
 
-  json_object_object_get_ex(obj, "cmd", &cmd_obj);
+  json_object_object_get_ex(obj, "MsgType", &cmd_obj);
 
   if (cmd_obj) {
     const char *cmd = json_object_get_string(cmd_obj);
     bfdMonitorProcessCmd(cmd, obj, mon);
   } else {
-    bfdLog(LOG_ERR, "expected 'cmd' in json not found\n");
+    bfdLog(LOG_ERR, "expected 'MsgType' in json not found\n");
   }
 
   json_object_put(obj);
@@ -89,8 +141,10 @@ static void bfdMonitorRecvPkt(int sock, void *arg)
 {
   ssize_t res;
   char buf[BUF_SZ+1];
-  MonitorInfo_t *mon = NULL; // TODO: create a mon-info instance. This
-                             // may not be the right place to do it.
+
+  // TODO: create a mon-info instance. This may not be the right place
+  // to do it.
+  MonitorInfo_t mon = { 0 };
 
   res = read(sock, buf, BUF_SZ);
 
@@ -113,7 +167,7 @@ static void bfdMonitorRecvPkt(int sock, void *arg)
     // TODO: Start session? Most likely will start a session when a
     // command pkt comes over the connection.
     // TODO: Parse buffer and dispatch commands. Command Pattern?
-    bfdMonitorProcessPkt(buf, mon);
+    bfdMonitorProcessPkt(buf, &mon);
   }
 }
 
