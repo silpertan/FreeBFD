@@ -48,7 +48,7 @@ int main(int argc, char **argv)
   bfdLogInit();
 
   /* Get command line options */
-  while ((c = getopt(argc, argv, "c:dm:")) != -1) {
+  while ((c = getopt(argc, argv, "c:dm:v")) != -1) {
     switch (c) {
     case 'c':
       configFile = optarg;
