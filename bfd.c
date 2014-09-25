@@ -14,6 +14,7 @@
 #include "bfd.h"
 #include "tp-timers.h"
 #include "bfdLog.h"
+#include "bfdExtensions.h"
 
 #define UNUSED(x) { if(x){} }
 
@@ -453,6 +454,22 @@ bool bfdRegisterSession(bfdSession *bfd)
   static uint16_t srcPort = BFD_SRCPORTINIT;
   int ttlval = BFD_1HOPTTLVALUE;
   uint32_t selectedMin;
+
+  if (!bfdExtCheck(BFD_EXT_SPECIFYPORTS)) {
+    if (bfd->peerPort != BFD_DEFDESTPORT) {
+      bfdLog(LOG_WARNING, "Invalid remote port: %d\n", bfd->peerPort);
+      bfdLog(LOG_WARNING,
+             "Did you forget to enable the SpecifyPorts extension?\n");
+      return false;
+    }
+
+    if (bfd->localPort != BFD_DEFDESTPORT) {
+      bfdLog(LOG_WARNING, "Invalid local port: %d\n", bfd->localPort);
+      bfdLog(LOG_WARNING,
+             "Did you forget to enable the SpecifyPorts extension?\n");
+      return false;
+    }
+  }
 
   bfd->LocalDiscr = (uint32_t)((uintptr_t)bfd & 0xffffffff);
 

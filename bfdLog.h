@@ -5,7 +5,7 @@
  *                            have gotten into this condition)
  *   - Warning (LOG_WARNING): problems that have been detected that will
  *                            prevent the system or session from working
- *                            as expected (e.g. link is down)
+ *                            as expected (e.g. link is down, config is wrong)
  *   - Notice (LOG_NOTICE):   major protocol/session occurrences (e.g. state
  *                            change, session create/delete)
  *   - Info (LOG_INFO):       more intricate protocol/session operational

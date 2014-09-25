@@ -23,6 +23,7 @@ SRCS := bfd.c
 SRCS += bfd-monitor.c
 SRCS += tp-timers.c
 SRCS += bfdLog.c
+SRCS += bfdExtensions.c
 
 OBJS := $(SRCS:%.c=%.o)
 INCS := $(SRCS:%.c=%.h)

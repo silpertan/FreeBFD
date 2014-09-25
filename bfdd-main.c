@@ -12,12 +12,15 @@
 #include "bfd.h"
 #include "bfd-monitor.h"
 #include "bfdLog.h"
+#include "bfdExtensions.h"
 
 /*
  * Command line usage info
  */
 static void bfddUsage(void)
 {
+  int idx;
+
   fprintf(stderr, "Usage:\n");
   fprintf(stderr, "\tbfdd [options] -c config-file [-v]\n");
   fprintf(stderr, "Where:\n");
@@ -27,6 +30,15 @@ static void bfddUsage(void)
   fprintf(stderr, "\t-m port: Port monitor server will listen on (default %d)\n",
           DEFAULT_MONITOR_PORT);
   fprintf(stderr, "\t-v: increase level of debug output (can be repeated)\n");
+  fprintf(stderr, "\t-x extension: enable a named extension (can be repeated)\n");
+  for (idx=0; idx < BFD_EXT_MAX; idx++) {
+    const char* name;
+    const char* desc;
+
+    bfdExtDescribe(idx, &name, &desc);
+    fprintf(stderr, "\t\t%s\t%s\n", name, desc);
+  }
+  fprintf(stderr, "\n");
   fprintf(stderr, "Signals:\n");
   fprintf(stderr, "\tUSR1: start poll sequence on all demand mode sessions\n");
   fprintf(stderr, "\tUSR2: toggle admin down on all sessions\n");
@@ -44,11 +56,12 @@ int main(int argc, char **argv)
 
   config_t cfg;
   config_setting_t *sns;
+  config_setting_t *exts;
 
   bfdLogInit();
 
   /* Get command line options */
-  while ((c = getopt(argc, argv, "c:dm:v")) != -1) {
+  while ((c = getopt(argc, argv, "c:dm:vx:")) != -1) {
     switch (c) {
     case 'c':
       configFile = optarg;
@@ -65,6 +78,13 @@ int main(int argc, char **argv)
       break;
     case 'v':
       bfdLogMore();
+      break;
+    case 'x':
+      if (!bfdExtEnable(optarg)) {
+        fprintf(stderr, "Invalid extension: %s\n", optarg);
+        bfddUsage();
+        exit(1);
+      }
       break;
     default:
       bfddUsage();
@@ -108,6 +128,36 @@ int main(int argc, char **argv)
     exit(1);
   }
 
+  /* Parse extensions */
+  if ((exts = config_lookup(&cfg, "Extensions")) != NULL) {
+    int32_t cnt = config_setting_length(exts);
+    uint32_t i;
+
+    for (i=0; i<cnt; i++) {
+      const char* extName;
+      bool extVal;
+
+      config_setting_t *ext = config_setting_get_elem(exts, i);
+
+      if ((extName = config_setting_name(ext)) == NULL) {
+        bfdLog(LOG_WARNING, "Unnamed extension [%d] - ignoring\n", i);
+        continue;
+      }
+
+      extVal = config_setting_get_bool(ext);
+
+      if (!extVal) { continue; }
+
+      if (!bfdExtEnable(extName)) {
+        bfdLog(LOG_WARNING,
+               "Attempt to enable unknown extension [%s] - ignoring\n",
+               extName);
+        continue;
+      }
+    }
+  }
+
+  /* Parse configured sessions */
   if ((sns = config_lookup(&cfg, "Sessions")) != NULL) {
     int32_t cnt = config_setting_length(sns);
     uint32_t i;
@@ -127,14 +177,24 @@ int main(int argc, char **argv)
       config_setting_t *sn = config_setting_get_elem(sns, i);
 
       if (!config_setting_lookup_string(sn, "PeerAddress", &connectaddr)) {
-        bfdLog(LOG_ERR, "Session %d missing PeerAddress - Skipping Session!\n", i);
+        bfdLog(LOG_WARNING,
+               "Session %d missing PeerAddress - Skipping Session!\n", i);
         continue;
       }
 
       if (config_setting_lookup_int(sn, "PeerPort", &peerPort)) {
         if ((uint32_t)peerPort & 0xffff0000) {
-          bfdLog(LOG_ERR, "Session %d PeerPort out of range: %d - Skipping Session!\n",
+          bfdLog(LOG_WARNING,
+                 "Session %d PeerPort out of range: %d - Skipping Session!\n",
                  i, peerPort);
+          continue;
+        }
+
+        if (!bfdExtCheck(BFD_EXT_SPECIFYPORTS)) {
+          bfdLog(LOG_WARNING,
+                 "Invalid remote port: %d - Skipping Session!\n", peerPort);
+          bfdLog(LOG_WARNING,
+                 "Did you forget to enable the SpecifyPorts extension?\n");
           continue;
         }
       } else {
@@ -143,8 +203,16 @@ int main(int argc, char **argv)
 
       if (config_setting_lookup_int(sn, "LocalPort", &localport)) {
         if ((uint32_t)localport & 0xffff0000) {
-          bfdLog(LOG_ERR, "Session %d LocalPort out of range: %d - Skipping Session!\n",
+          bfdLog(LOG_WARNING, "Session %d LocalPort out of range: %d - Skipping Session!\n",
                  i, localport);
+          continue;
+        }
+
+        if (!bfdExtCheck(BFD_EXT_SPECIFYPORTS)) {
+          bfdLog(LOG_WARNING,
+                 "Invalid local port: %d - Skipping Session!\n", localport);
+          bfdLog(LOG_WARNING,
+                 "Did you forget to enable the SpecifyPorts extension?\n");
           continue;
         }
       } else {
