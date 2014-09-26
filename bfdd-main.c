@@ -13,6 +13,7 @@
 #include "bfd-monitor.h"
 #include "bfdLog.h"
 #include "bfdExtensions.h"
+#include "tp-timers.h"
 
 /*
  * Command line usage info
@@ -230,15 +231,15 @@ int main(int argc, char **argv)
           continue;
         }
       } else {
-        detectMult = BFD_DEFDETECTMULT;
+        detectMult = BFDDFLT_DETECTMULT;
       }
 
       if (!config_setting_lookup_int(sn, "RequiredMinRxInterval", &reqMinRx)) {
-        reqMinRx = BFD_DEFREQUIREDMINRX;
+        reqMinRx = BFDDFLT_REQUIREDMINRX;
       }
 
       if (!config_setting_lookup_int(sn, "DesiredMinTxInterval", &desMinTx)) {
-        desMinTx = BFD_DEFDESIREDMINTX;
+        desMinTx = BFDDFLT_DESIREDMINTX;
       }
 
       bfdLog(LOG_NOTICE,
@@ -274,9 +275,9 @@ int main(int argc, char **argv)
       bfd->DetectMult            = (uint8_t)detectMult;
       bfd->DesiredMinTxInterval  = (uint32_t)desMinTx;
       bfd->RequiredMinRxInterval = (uint32_t)reqMinRx;
-      bfd->peer                  = peeraddr;
-      bfd->peerPort              = (uint16_t)peerPort;
-      bfd->localPort             = (uint16_t)localport;
+      bfd->PeerAddr              = peeraddr;
+      bfd->PeerPort              = (uint16_t)peerPort;
+      bfd->LocalPort             = (uint16_t)localport;
 
       if (!bfdRegisterSession(bfd)) {
         bfdLog(LOG_ERR, "Can't create initial session: %m\n");

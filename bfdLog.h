@@ -16,6 +16,7 @@
  * the output level by one step (e.g. LOG_WARNING -> LOG_NOTICE).
  *
  ****************************************************************************/
+#include <syslog.h>
 
 /* Comment this out to prevent logging to stderr */
 #define BFD_LOGTOSTDERR

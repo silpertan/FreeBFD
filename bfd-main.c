@@ -11,14 +11,15 @@
 #include "bfd.h"
 #include "bfdLog.h"
 #include "bfdExtensions.h"
+#include "tp-timers.h"
 
 /*
  * Session defaults
  */
-static uint8_t  defDemandModeDesired = BFD_DEFDEMANDMODEDESIRED;
-static uint8_t  defDetectMult        = BFD_DEFDETECTMULT;
-static uint32_t defDesiredMinTx      = BFD_DEFDESIREDMINTX;
-static uint32_t defRequiredMinRx     = BFD_DEFREQUIREDMINRX;
+static uint8_t  defDemandModeDesired = BFDDFLT_DEMANDMODE;
+static uint8_t  defDetectMult        = BFDDFLT_DETECTMULT;
+static uint32_t defDesiredMinTx      = BFDDFLT_DESIREDMINTX;
+static uint32_t defRequiredMinRx     = BFDDFLT_REQUIREDMINRX;
 
 /*
  * Command line usage info
@@ -32,13 +33,13 @@ static void bfdUsage(void)
                   "\t     [-v] [-x extension]\n");
   fprintf(stderr, "Where:\n");
   fprintf(stderr, "\t-c: create session with 'connectaddr' (required option)\n");
-  fprintf(stderr, "\t    optionally override dest port (default %d)\n", BFD_DEFDESTPORT);
-  fprintf(stderr, "\t-l: listen on 'localport' (default %d)\n", BFD_DEFDESTPORT);
+  fprintf(stderr, "\t    optionally override dest port (default %d)\n", BFDDFLT_DESTPORT);
+  fprintf(stderr, "\t-l: listen on 'localport' (default %d)\n", BFDDFLT_DESTPORT);
   fprintf(stderr, "\t-d: toggle demand mode desired (default %s)\n",
-          BFD_DEFDEMANDMODEDESIRED ? "on" : "off");
-  fprintf(stderr, "\t-m mult: detect multiplier (default %d)\n", BFD_DEFDETECTMULT);
-  fprintf(stderr, "\t-r tout: required min rx (default %d)\n", BFD_DEFREQUIREDMINRX);
-  fprintf(stderr, "\t-t tout: desired min tx (default %d)\n", BFD_DEFDESIREDMINTX);
+          BFDDFLT_DEMANDMODE? "on" : "off");
+  fprintf(stderr, "\t-m mult: detect multiplier (default %d)\n", BFDDFLT_DETECTMULT);
+  fprintf(stderr, "\t-r tout: required min rx (default %d)\n", BFDDFLT_REQUIREDMINRX);
+  fprintf(stderr, "\t-t tout: desired min tx (default %d)\n", BFDDFLT_DESIREDMINTX);
   fprintf(stderr, "\t-v: increase level of debug output (can be repeated)\n");
   fprintf(stderr, "\t-x extension: enable a named extension (can be repeated)\n");
   for (idx=0; idx < BFD_EXT_MAX; idx++) {
@@ -64,8 +65,8 @@ int main(int argc, char **argv)
   char *cptr;
   struct hostent *hp;
   struct in_addr peeraddr;
-  uint16_t peerPort = BFD_DEFDESTPORT;
-  uint16_t localPort = BFD_DEFDESTPORT;
+  uint16_t peerPort = BFDDFLT_DESTPORT;
+  uint16_t localPort = BFDDFLT_DESTPORT;
 
   bfdSession *bfd;
 
@@ -139,14 +140,14 @@ int main(int argc, char **argv)
   }
 
   if (!bfdExtCheck(BFD_EXT_SPECIFYPORTS)) {
-    if (peerPort != BFD_DEFDESTPORT) {
+    if (peerPort != BFDDFLT_DESTPORT) {
       fprintf(stderr, "Invalid remote port: %d\n", peerPort);
       fprintf(stderr, "Did you forget to enable the SpecifyPorts extension?\n");
       bfdUsage();
       exit(1);
     }
 
-    if (localPort != BFD_DEFDESTPORT) {
+    if (localPort != BFDDFLT_DESTPORT) {
       fprintf(stderr, "Invalid local port: %d\n", localPort);
       fprintf(stderr, "Did you forget to enable the SpecifyPorts extension?\n");
       bfdUsage();
@@ -191,20 +192,18 @@ int main(int argc, char **argv)
          inet_ntoa(peeraddr));
 
   /* Get memory */
-  if ((bfd = (bfdSession*)malloc(sizeof(bfdSession))) == NULL) {
+  if ((bfd = (bfdSession*)calloc(1, sizeof(bfdSession))) == NULL) {
     bfdLog(LOG_NOTICE, "Can't malloc memory for new session: %m\n");
     exit(1);
   }
 
-  memset(bfd, 0, sizeof(bfdSession));
-
-  bfd->DemandMode            = (uint8_t)(defDemandModeDesired & 0x1);
+  bfd->DemandMode            = defDemandModeDesired;
   bfd->DetectMult            = defDetectMult;
   bfd->DesiredMinTxInterval  = defDesiredMinTx;
   bfd->RequiredMinRxInterval = defRequiredMinRx;
-  bfd->peer                  = peeraddr;
-  bfd->peerPort              = peerPort;
-  bfd->localPort             = localPort;
+  bfd->PeerAddr              = peeraddr;
+  bfd->PeerPort              = peerPort;
+  bfd->LocalPort             = localPort;
 
   if (!bfdRegisterSession(bfd)) {
     bfdLog(LOG_ERR, "Can't creating initial session: %m\n");
