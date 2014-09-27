@@ -22,7 +22,8 @@ EXE_FILES = $(OUTDIR)/bfd $(OUTDIR)/bfdd
 
 TARFILE = bfd.tar.gz
 
-GEN_DEPS = -Wp,-M,-MP,-MT,$@,-MF,.deps/$(*F).d
+DEPDIR := $(OUTDIR)/.deps
+GEN_DEPS = -Wp,-M,-MP,-MT,$@,-MF,$(DEPDIR)/$(*F).d
 
 # Use 'make V=1' to see compile command.
 ifeq ("$(V)", "1")
@@ -77,4 +78,4 @@ realclean:
 showvar:
 	@echo $(var)=$($(var))
 
--include $(shell mkdir .deps 2>/dev/null) $(wildcard .deps/*)
+-include $(shell mkdir -p $(DEPDIR) 2>/dev/null) $(wildcard $(DEPDIR)/*)
