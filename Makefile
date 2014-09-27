@@ -2,31 +2,23 @@
 # Makefile for BFD protocol application
 #
 
-AVL_TARFILE = avl-1.4.0.tar.gz
-AVL_DIR = avl-1.4.0
+OUTDIR = build
+AVL_TARFILE = src/core/avl-1.4.0.tar.gz
+AVL_DIR = $(OUTDIR)/avl-1.4.0
 
 CC = cc
 
 GEN_CFLAGS = -g -Wall -Wconversion -Werror
 GEN_CFLAGS += $(shell pkg-config --cflags json-c)
 
-INCDIRS = -I. -I$(AVL_DIR)
-override CFLAGS := $(GEN_CFLAGS) $(INCDIRS) $(CFLAGS)
+INC = -Isrc/inc -I$(AVL_DIR)
+override CFLAGS := $(GEN_CFLAGS) $(INC) $(CFLAGS)
 CC_LINK = $(CC)
 
-LIBS = -Lavl-1.4.0 -lavl
+LIBS = -L$(AVL_DIR) -lavl
 LIBS += $(shell pkg-config --libs json-c)
 
-EXE_FILES = bfd bfdd
-
-SRCS := bfd.c
-SRCS += bfd-monitor.c
-SRCS += tp-timers.c
-SRCS += bfdLog.c
-SRCS += bfdExtensions.c
-
-OBJS := $(SRCS:%.c=%.o)
-INCS := $(SRCS:%.c=%.h)
+EXE_FILES = $(OUTDIR)/bfd $(OUTDIR)/bfdd
 
 TARFILE = bfd.tar.gz
 
@@ -39,34 +31,50 @@ else
     Q = @
 endif
 
-%.o: %.c
+define do_include
+  SRCS:=
+  include src/$(1)
+  $(dir $(1))SRCS:=$$(addprefix src/$(dir $(1)),$$(SRCS))
+  $(dir $(1))OBJS:=$$(addprefix $(OUTDIR)/,$$(patsubst %.c,%.o,$$(notdir $$($(dir $(1))SRCS))))
+
+  # create a dependency from each .o to each .c
+  $$(foreach src,$$($(dir $(1))SRCS),$$(eval $$(addprefix $(OUTDIR)/,$$(patsubst %.c,%.o,$$(notdir $$(src)))): $$(src)))
+endef
+
+MKMK := $(shell cd src ; find * -name make.mk)
+$(foreach mkmk,$(MKMK),$(eval $(call do_include,$(mkmk))))
+
+%.o:
 	@echo CC $@
 	@$(CC) $(CFLAGS) -E $(GEN_DEPS) -o /dev/null $< || exit 0
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
 
+.DEFAULT_GOAL:=all
+.PHONY: all
 all: $(AVL_DIR)/libavl.a $(EXE_FILES)
 
 $(AVL_DIR)/README:
-	tar xvfz $(AVL_TARFILE)
+	mkdir -p $(OUTDIR)
+	tar -C $(OUTDIR) -xvzf $(AVL_TARFILE)
 
 $(AVL_DIR)/libavl.a: $(AVL_DIR)/README
 	(cd $(AVL_DIR); ./configure; make)
 
-bfd: $(OBJS) bfd-main.o
+$(OUTDIR)/bfd: $(core/OBJS) $(bfd/OBJS)
 	@echo "LINK $@"
-	$(Q)$(CC_LINK) -o $@ $(OBJS) bfd-main.o $(LIBS)
+	$(Q)$(CC_LINK) -o $@ $^ $(LIBS)
 
-bfdd: $(OBJS) bfdd-main.o
+$(OUTDIR)/bfdd: $(core/OBJS) $(monitor/OBJS) $(bfdd/OBJS)
 	@echo "LINK $@"
-	$(Q)$(CC_LINK) -o $@ $(OBJS) bfdd-main.o $(LIBS) -lconfig
+	$(Q)$(CC_LINK) -o $@ $^ $(LIBS) -lconfig
 
 clean:
-	rm -f *.o $(EXE_FILES)
+	rm -f $(OUTDIR)/*.o $(EXE_FILES)
 
 realclean:
-	rm -rf *.o $(EXE_FILES) $(AVL_DIR) *~ *.bak $(TARFILE)
+	rm -rf $(OUTDIR) *~ *.bak
 
-tarfile:
-	tar cvfz $(TARFILE) $(SRCS) bfd-main.c bfdd-main.c$(INCS) Makefile $(AVL_TARFILE)
+showvar:
+	@echo $(var)=$($(var))
 
 -include $(shell mkdir .deps 2>/dev/null) $(wildcard .deps/*)
