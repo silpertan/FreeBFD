@@ -68,7 +68,7 @@ int main(int argc, char **argv)
   uint16_t peerPort = BFDDFLT_DESTPORT;
   uint16_t localPort = BFDDFLT_DESTPORT;
 
-  bfdSession *bfd;
+  bfdSession bfd;
 
   /* Init random() */
   srandom((unsigned int)time(NULL));
@@ -191,21 +191,17 @@ int main(int argc, char **argv)
   bfdLog(LOG_INFO, "Creating initial session with %s (%s)\n", connectaddr,
          inet_ntoa(peeraddr));
 
-  /* Get memory */
-  if ((bfd = (bfdSession*)calloc(1, sizeof(bfdSession))) == NULL) {
-    bfdLog(LOG_NOTICE, "Can't malloc memory for new session: %m\n");
-    exit(1);
-  }
+  memset(&bfd, 0, sizeof(bfdSession));
 
-  bfd->DemandMode            = defDemandModeDesired;
-  bfd->DetectMult            = defDetectMult;
-  bfd->DesiredMinTxInterval  = defDesiredMinTx;
-  bfd->RequiredMinRxInterval = defRequiredMinRx;
-  bfd->PeerAddr              = peeraddr;
-  bfd->PeerPort              = peerPort;
-  bfd->LocalPort             = localPort;
+  bfd.DemandMode            = defDemandModeDesired;
+  bfd.DetectMult            = defDetectMult;
+  bfd.DesiredMinTxInterval  = defDesiredMinTx;
+  bfd.RequiredMinRxInterval = defRequiredMinRx;
+  bfd.PeerAddr              = peeraddr;
+  bfd.PeerPort              = peerPort;
+  bfd.LocalPort             = localPort;
 
-  if (!bfdRegisterSession(bfd)) {
+  if (!bfdCreateSession(&bfd)) {
     bfdLog(LOG_ERR, "Can't creating initial session: %m\n");
     exit(1);
   }

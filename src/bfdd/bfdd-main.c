@@ -173,7 +173,7 @@ int main(int argc, char **argv)
       int32_t detectMult;
       int32_t reqMinRx;
       int32_t desMinTx;
-      bfdSession *bfd;
+      bfdSession bfd;
 
       config_setting_t *sn = config_setting_get_elem(sns, i);
 
@@ -248,40 +248,34 @@ int main(int argc, char **argv)
 
       /* Get peer address */
       if ((hp = gethostbyname(connectaddr)) == NULL) {
-        bfdLog(LOG_ERR, "Can't resolve %s: %s\n", connectaddr, hstrerror(h_errno));
-        exit(1);
+        bfdLog(LOG_ERR, "Can't resolve %s - Skipping Session %d: %s\n",
+               connectaddr, i, hstrerror(h_errno));
+        continue;
       }
 
       if (hp->h_addrtype != AF_INET) {
-        bfdLog(LOG_ERR, "Resolved address type not AF_INET\n");
-        exit(1);
+        bfdLog(LOG_ERR, "Resolved address type for session %d not AF_INET - Skipping Session\n", i);
+        continue;
       }
 
       memcpy(&peeraddr, hp->h_addr, sizeof(peeraddr));
 
-      /* Make the initial session */
-      bfdLog(LOG_INFO, "Creating initial session with %s (%s)\n", connectaddr,
+      bfdLog(LOG_INFO, "Creating session %d with %s (%s)\n", i, connectaddr,
              inet_ntoa(peeraddr));
 
-      /* Get memory */
-      if ((bfd = (bfdSession*)malloc(sizeof(bfdSession))) == NULL) {
-        bfdLog(LOG_NOTICE, "Can't malloc memory for new session: %m\n");
-        exit(1);
-      }
+      memset(&bfd, 0, sizeof(bfdSession));
 
-      memset(bfd, 0, sizeof(bfdSession));
+      bfd.DemandMode            = (uint8_t)(demandMode & 0x1);
+      bfd.DetectMult            = (uint8_t)detectMult;
+      bfd.DesiredMinTxInterval  = (uint32_t)desMinTx;
+      bfd.RequiredMinRxInterval = (uint32_t)reqMinRx;
+      bfd.PeerAddr              = peeraddr;
+      bfd.PeerPort              = (uint16_t)peerPort;
+      bfd.LocalPort             = (uint16_t)localport;
 
-      bfd->DemandMode            = (uint8_t)(demandMode & 0x1);
-      bfd->DetectMult            = (uint8_t)detectMult;
-      bfd->DesiredMinTxInterval  = (uint32_t)desMinTx;
-      bfd->RequiredMinRxInterval = (uint32_t)reqMinRx;
-      bfd->PeerAddr              = peeraddr;
-      bfd->PeerPort              = (uint16_t)peerPort;
-      bfd->LocalPort             = (uint16_t)localport;
-
-      if (!bfdRegisterSession(bfd)) {
-        bfdLog(LOG_ERR, "Can't create initial session: %m\n");
-        exit(1);
+      if (!bfdCreateSession(&bfd)) {
+        bfdLog(LOG_ERR, "Can't create session %d: %m\n", i);
+        continue;
       }
     }
   }

@@ -24,6 +24,7 @@ static bfdSessionInt *sessionHash[BFD_HASHSIZE];    /* Find session from discrim
 static bfdSessionInt *peerHash[BFD_HASHSIZE];       /* Find session from peer address */
 
 static bfdSessionInt *bfdGetSession(bfdCpkt *cp, struct sockaddr_in *sin);
+static bfdSessionInt *bfdMatchSession(bfdSession *_bfd);
 static void bfdXmtTimeout(tpTimer *tim, void *arg);
 static void bfdSessionDown(bfdSessionInt *bfd, uint8_t diag);
 static void bfdSessionUp(bfdSessionInt *bfd);
@@ -379,24 +380,116 @@ void bfdSendCPkt(bfdSessionInt *bfd, int fbit)
   bfdStartXmtTimer(bfd);
 }
 
-bfdSubHndl bfdSubscribe(bfdSession *bfd, bfdSubCB cb, void *arg)
+/* Searches for an exact match using the Session Discriminator
+ * values in the bfdSession.
+ */
+static bfdSessionInt *bfdMatchSession(bfdSession *_bfd)
 {
-  /* determine if the session exists or needs to be created */
-  /* add the notification object to the session */
+  uint32_t hkey;
+  bfdSessionInt *bfd;
 
-  UNUSED(bfd);
-  UNUSED(cb);
-  UNUSED(arg);
+  hkey = BFD_MKHKEY(_bfd->PeerAddr.s_addr);
+  for (bfd = peerHash[hkey]; bfd != NULL; bfd = bfd->PeerNext) {
+    if (bfd->Sn.PeerAddr.s_addr == _bfd->PeerAddr.s_addr &&
+        bfd->Sn.PeerPort == _bfd->PeerPort &&
+        bfd->Sn.LocalPort == _bfd->LocalPort)
+    {
+      return(bfd);
+    }
+  }
 
   return NULL;
 }
 
+bfdSubHndl bfdSubscribe(bfdSession *_bfd, bfdSubCB cb, void *arg)
+{
+  bfdSessionInt *bfd;
+  bfdNotifier *notify;
+
+  if (cb == NULL) {
+    bfdLog(LOG_WARNING, "Subscribing with NULL callback not supported\n");
+    return NULL;
+  }
+
+  notify = calloc(1, sizeof(bfdNotifier));
+  if (notify == NULL) {
+    bfdLog(LOG_ERR, "Unable to allocate memory for notifier: %m\n");
+    return NULL;
+  }
+
+  notify->cb = cb;
+  notify->cbArg = arg;
+
+  /* determine if the session exists or needs to be created */
+  if ((bfd = bfdMatchSession(_bfd)) == NULL) {
+    if (!bfdCreateSession(_bfd)) { return NULL; }
+  } else {
+    bfdLog(LOG_NOTICE, "[%x] Adding notifier to session with peer %s:%d\n",
+           bfd->LocalDiscr, inet_ntoa(bfd->Sn.PeerAddr), bfd->Sn.PeerPort);
+  }
+
+  /* add the notification object to the session */
+  notify->sn = bfd;
+  notify->next = bfd->notify;
+  bfd->notify = notify;
+
+  /* Thoughts about reference counts.  Sessions are created in the following
+   * ways:
+   * - one session per process (e.g. bfd -c <ip-addr>)
+   * - by configuration file to bfdd
+   * - via subscription on the control socket
+   * - [future] on-demand sessions
+   * All but the on-demand case should be created via bfdSubscribe().
+   */
+  bfd->RefCnt++;
+
+  /* convey the current state of the session so that the subscriber can
+   * set itself up properly
+   */
+  cb(bfd->SessionState, arg);
+
+  return (void*)notify;
+}
+
 void bfdUnsubscribe(bfdSubHndl hndl)
 {
-  /* remove the notification object from the session */
-  /* if there are no more listeners for the session, delete it */
+  bfdNotifier *notify = (bfdNotifier*)hndl;
+  bfdSessionInt *bfd;
 
-  UNUSED(hndl);
+  if (notify == NULL) { return; }
+
+  bfd = notify->sn;
+
+  /* remove the notification object from the session */
+  if (bfd->notify == notify) {
+    bfd->notify = notify->next;
+  } else {
+    bfdNotifier *cur = bfd->notify->next;
+    bfdNotifier *prev = bfd->notify;
+
+    while (cur) {
+      if (cur == notify) {
+        prev->next = cur->next;
+        break;
+      }
+
+      prev = cur;
+      cur = cur->next;
+    }
+
+    if (cur == NULL) {
+      bfdLog(LOG_WARNING,
+             "Attempt to unsubscribe non-existent notifier [%x]", hndl);
+      return;
+    }
+  }
+
+  free(notify);
+
+  /* if there are no more listeners for the session, delete it */
+  if (bfd->RefCnt <= 0) {
+    bfdRmSession(bfd);
+  }
 }
 
 /* Buffer and msghdr for received packets */
@@ -467,7 +560,7 @@ static bool bfdSetupRcvSocket(bfdSessionInt *bfd)
 /*
  * Make a session state object
  */
-bool bfdRegisterSession(bfdSession *_bfd)
+bool bfdCreateSession(bfdSession *_bfd)
 {
   struct sockaddr_in sin;
   int pcount;
@@ -495,7 +588,7 @@ bool bfdRegisterSession(bfdSession *_bfd)
 
   bfd = calloc(1, sizeof(bfdSessionInt));
   if (bfd == NULL) {
-    bfdLog(LOG_ERR, "Unable to allocate BFD session\n");
+    bfdLog(LOG_ERR, "Unable to allocate BFD session: %m\n");
     return false;
   }
 
@@ -592,12 +685,29 @@ void bfdStartXmtTimer(bfdSessionInt *bfd)
   tpStartUsTimer(&(bfd->XmtTimer), jitter, bfdXmtTimeout, bfd);
 }
 
+bool bfdDeleteSession(bfdSession *_bfd)
+{
+  bfdSessionInt *bfd;
+
+  if ((bfd = bfdMatchSession(_bfd)) == NULL) {
+    bfdLog(LOG_WARNING, "Attempt to delete unkonwn session\n");
+    return false;
+  }
+
+  bfdRmSession(bfd);
+  free(bfd);
+
+  return true;
+}
+
 /*
- * Destroy a session (never gets called in current code)
+ * Destroy a session
  */
 void bfdRmSession(bfdSessionInt *bfd)
 {
   uint32_t hkey;
+
+  /* TODO: Need to close out the session */
 
   hkey = BFD_MKHKEY(bfd->LocalDiscr);
   if (bfdRmFromList(&(sessionHash[hkey]), bfd) < 0) {

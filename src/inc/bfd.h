@@ -38,9 +38,14 @@ typedef void* bfdSubHndl;
 typedef void (*bfdSubCB)(bfdState state, void *arg);
 
 typedef struct {
+  /* Session Discriminators: A unique set of values for these
+   * fields identifies a specific session
+   */
   struct in_addr PeerAddr;
   uint16_t PeerPort;
   uint16_t LocalPort;
+
+  /* Session Parameters */
   bool     DemandMode;
   uint8_t  DetectMult;
   uint8_t  AuthType;
@@ -49,9 +54,10 @@ typedef struct {
 } bfdSession;
 
 /* Function prototypes */
-bfdSubHndl bfdSubscribe(bfdSession *bfd, bfdSubCB cb, void *arg);
+bfdSubHndl bfdSubscribe(bfdSession *_bfd, bfdSubCB cb, void *arg);
 void bfdUnsubscribe(bfdSubHndl hndl);
-bool bfdRegisterSession(bfdSession *bfd);
+bool bfdCreateSession(bfdSession *_bfd);
+bool bfdDeleteSession(bfdSession *_bfd);
 
 void bfdToggleAdminDown(int sig);
 void bfdStartPollSequence(int sig);

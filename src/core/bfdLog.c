@@ -1,8 +1,7 @@
 #include <stdarg.h>
 #include <syslog.h>
+#include <stdlib.h>
 #include "bfdLog.h"
-
-#define BFD_LOGID          "bfdd"
 
 #ifdef BFD_LOGTOSTDERR
 #define BFD_LOGFLAG LOG_PERROR
@@ -12,7 +11,7 @@ static int sMaxLevel = LOG_NOTICE;
 
 void bfdLogInit(void)
 {
-  openlog(BFD_LOGID, LOG_PID | BFD_LOGFLAG, LOG_DAEMON);
+  openlog(NULL, LOG_PID | BFD_LOGFLAG, LOG_DAEMON);
 }
 
 void bfdLogMore(void)

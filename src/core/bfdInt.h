@@ -46,6 +46,7 @@ typedef struct _bfdSession {
   struct _bfdSession *ListNext;
   struct _bfdSession *HashNext;
   struct _bfdSession *PeerNext;
+  struct _bfdNotifier *notify;
 
   uint16_t SessionState       : 2;
   uint16_t RemoteSessionState : 2;
@@ -71,6 +72,13 @@ typedef struct _bfdSession {
   tpTimer  XmtTimer;
   int      Sock;
 } bfdSessionInt;
+
+typedef struct _bfdNotifier {
+  bfdSubCB             cb;
+  void                *cbArg;
+  bfdSessionInt       *sn;
+  struct _bfdNotifier *next;
+} bfdNotifier;
 
 void bfdRcvPkt(int s, void *arg);
 void bfdSendCPkt(bfdSessionInt *bfd, int fbit);
