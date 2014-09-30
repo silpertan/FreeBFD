@@ -581,7 +581,6 @@ bool bfdDeleteSession(bfdSession *_bfd)
   }
 
   bfdRmSession(bfd);
-  free(bfd);
 
   return true;
 }
@@ -593,21 +592,26 @@ void bfdRmSession(bfdSessionInt *bfd)
 {
   uint32_t hkey;
 
-  /* TODO: Need to close out the session */
+  bfdSocketClose(bfd);
 
   hkey = BFD_MKHKEY(bfd->LocalDiscr);
   if (bfdRmFromList(&(sessionHash[hkey]), bfd) < 0) {
     bfdLog(LOG_ERR, "Can't find session %x in session hash\n", bfd->LocalDiscr);
   }
+
   hkey = BFD_MKHKEY(bfd->Sn.PeerAddr.s_addr);
   if (bfdRmFromList(&(peerHash[hkey]), bfd) < 0) {
     bfdLog(LOG_ERR, "Can't find session %x in peer hash\n", bfd->LocalDiscr);
   }
+
   if (bfdRmFromList(&sessionList, bfd) < 0) {
     bfdLog(LOG_ERR, "Can't find session %x in session list\n", bfd->LocalDiscr);
   }
+
   tpStopTimer(&(bfd->XmtTimer));
   tpStopTimer(&(bfd->DetectTimer));
+
+  free(bfd);
 }
 
 /*
