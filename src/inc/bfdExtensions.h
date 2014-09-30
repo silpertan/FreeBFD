@@ -1,5 +1,8 @@
 #include <stdbool.h>
 
+#ifndef __BFDEXTENSIONS_H__
+#define __BFDEXTENSIONS_H__
+
 typedef enum {
   BFD_EXT_SPECIFYPORTS,
 
@@ -13,3 +16,5 @@ typedef enum {
 bool bfdExtEnable(const char *ext);
 bool bfdExtCheck(bfdExtName ext);
 bool bfdExtDescribe(bfdExtName ext, const char** name, const char** desc);
+
+#endif /* __BFDEXTENSIONS_H__ */

@@ -33,8 +33,8 @@ static void bfdUsage(void)
                   "\t     [-v] [-x extension]\n");
   fprintf(stderr, "Where:\n");
   fprintf(stderr, "\t-c: create session with 'connectaddr' (required option)\n");
-  fprintf(stderr, "\t    optionally override dest port (default %d)\n", BFDDFLT_DESTPORT);
-  fprintf(stderr, "\t-l: listen on 'localport' (default %d)\n", BFDDFLT_DESTPORT);
+  fprintf(stderr, "\t    optionally override dest port (default %d)\n", BFDDFLT_UDPPORT);
+  fprintf(stderr, "\t-l: listen on 'localport' (default %d)\n", BFDDFLT_UDPPORT);
   fprintf(stderr, "\t-d: toggle demand mode desired (default %s)\n",
           BFDDFLT_DEMANDMODE? "on" : "off");
   fprintf(stderr, "\t-m mult: detect multiplier (default %d)\n", BFDDFLT_DETECTMULT);
@@ -65,8 +65,8 @@ int main(int argc, char **argv)
   char *cptr;
   struct hostent *hp;
   struct in_addr peeraddr;
-  uint16_t peerPort = BFDDFLT_DESTPORT;
-  uint16_t localPort = BFDDFLT_DESTPORT;
+  uint16_t peerPort = BFDDFLT_UDPPORT;
+  uint16_t localPort = BFDDFLT_UDPPORT;
 
   bfdSession bfd;
 
@@ -140,14 +140,14 @@ int main(int argc, char **argv)
   }
 
   if (!bfdExtCheck(BFD_EXT_SPECIFYPORTS)) {
-    if (peerPort != BFDDFLT_DESTPORT) {
+    if (peerPort != BFDDFLT_UDPPORT) {
       fprintf(stderr, "Invalid remote port: %d\n", peerPort);
       fprintf(stderr, "Did you forget to enable the SpecifyPorts extension?\n");
       bfdUsage();
       exit(1);
     }
 
-    if (localPort != BFDDFLT_DESTPORT) {
+    if (localPort != BFDDFLT_UDPPORT) {
       fprintf(stderr, "Invalid local port: %d\n", localPort);
       fprintf(stderr, "Did you forget to enable the SpecifyPorts extension?\n");
       bfdUsage();

@@ -13,7 +13,7 @@
 #define BFDDFLT_DETECTMULT      ((uint8_t)2)
 #define BFDDFLT_DESIREDMINTX    100000
 #define BFDDFLT_REQUIREDMINRX   50000
-#define BFDDFLT_DESTPORT        ((uint16_t)3784)
+#define BFDDFLT_UDPPORT         ((uint16_t)3784)
 
 typedef enum {
   BFDSTATE_ADMINDOWN = 0,

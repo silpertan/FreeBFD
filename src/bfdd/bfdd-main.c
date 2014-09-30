@@ -199,7 +199,7 @@ int main(int argc, char **argv)
           continue;
         }
       } else {
-        peerPort = 3784;
+        peerPort = BFDDFLT_UDPPORT;
       }
 
       if (config_setting_lookup_int(sn, "LocalPort", &localport)) {
@@ -217,7 +217,7 @@ int main(int argc, char **argv)
           continue;
         }
       } else {
-        localport = 3784;
+        localport = BFDDFLT_UDPPORT;
       }
 
       if (!config_setting_lookup_bool(sn, "DemandMode", &demandMode)) {

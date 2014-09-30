@@ -6,8 +6,8 @@
 #include <unistd.h>
 #include <signal.h>
 #include <sys/types.h>
-#include <sys/socket.h>
 #include <sys/uio.h>
+#include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <string.h>
@@ -29,7 +29,6 @@ static void bfdXmtTimeout(tpTimer *tim, void *arg);
 static void bfdSessionDown(bfdSessionInt *bfd, uint8_t diag);
 static void bfdSessionUp(bfdSessionInt *bfd);
 static void bfdDetectTimeout(tpTimer *tim, void *arg);
-static bool bfdSetupRcvSocket(bfdSessionInt *bfd);
 
 /*
  * All received packets come through here.
@@ -276,6 +275,7 @@ static void bfdDetectTimeout(tpTimer *tim, void *arg)
 /*
  * Bring session down
  */
+/* TODO: Add notifications here and at other places... */
 static void bfdSessionDown(bfdSessionInt *bfd, uint8_t diag)
 {
   uint32_t selectedMin;
@@ -370,7 +370,7 @@ void bfdSendCPkt(bfdSessionInt *bfd, int fbit)
   sin.sin_family = AF_INET;
   sin.sin_addr = bfd->Sn.PeerAddr;
   sin.sin_port = htons(bfd->Sn.PeerPort);
-  if (sendto(bfd->Sock, &cp, BFD_MINPKTLEN, 0, (struct sockaddr *)&sin,
+  if (sendto(bfd->TxSock, &cp, BFD_MINPKTLEN, 0, (struct sockaddr *)&sin,
              sizeof(struct sockaddr_in)) < 0) {
     bfdLog(LOG_WARNING, "[%x] Error sending control pkt: %m\n",
            bfd->LocalDiscr);
@@ -492,99 +492,14 @@ void bfdUnsubscribe(bfdSubHndl hndl)
   }
 }
 
-/* Buffer and msghdr for received packets */
-static uint8_t msgbuf[BFD_MINPKTLEN];
-static struct iovec msgiov = {
-  &(msgbuf[0]),
-  sizeof(msgbuf)
-};
-static uint8_t cmsgbuf[sizeof(struct cmsghdr) + 4];
-static struct sockaddr_in msgaddr;
-static struct msghdr msghdr = {
-  (void *)&msgaddr,
-  sizeof(msgaddr),
-  &msgiov,
-  1,
-  (void *)&cmsgbuf,
-  sizeof(cmsgbuf),
-  0
-};
-
 /*
- * Create and Register socket to receive control messages
- */
-static bool bfdSetupRcvSocket(bfdSessionInt *bfd)
-{
-  struct sockaddr_in sin;
-  int ttlval = BFD_1HOPTTLVALUE;
-  int rcvttl = 1;
-  int s;
-
-  if ((s = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
-    bfdLog(LOG_WARNING, "[%x] Can't get receive socket for peer %s:%d: %m\n",
-           bfd->LocalDiscr, inet_ntoa(bfd->Sn.PeerAddr), bfd->Sn.PeerPort);
-    return false;
-  }
-
-  if (setsockopt(s, SOL_IP, IP_TTL, &ttlval, sizeof(ttlval)) < 0) {
-    bfdLog(LOG_WARNING, "[%x] Can't set TTL for packets to %s:%d: %m\n",
-           bfd->LocalDiscr, inet_ntoa(bfd->Sn.PeerAddr), bfd->Sn.PeerPort);
-    return false;
-  }
-
-  if (setsockopt(s, SOL_IP, IP_RECVTTL, &rcvttl, sizeof(rcvttl)) < 0) {
-    bfdLog(LOG_WARNING,
-           "[%x] Can't set receive TTL for packets from %s:%d: %m\n",
-           bfd->LocalDiscr, inet_ntoa(bfd->Sn.PeerAddr), bfd->Sn.PeerPort);
-    return false;
-  }
-
-  sin.sin_family      = AF_INET;
-  sin.sin_addr.s_addr = INADDR_ANY;
-  sin.sin_port        = htons(bfd->Sn.LocalPort);
-
-  if (bind(s, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
-    bfdLog(LOG_WARNING,
-           "[%x] Can't bind socket to port %d for peer %s:%d: %m\n",
-           bfd->LocalDiscr, bfd->Sn.LocalPort, inet_ntoa(bfd->Sn.PeerAddr),
-           bfd->Sn.PeerPort);
-    return false;
-  }
-
-  /* Add socket to select poll */
-  tpSetSktActor(s, bfdRcvPkt, (void *)&msghdr, NULL);
-
-  return true;
-}
-
-/*
- * Make a session state object
+ * Make a session object
  */
 bool bfdCreateSession(bfdSession *_bfd)
 {
-  struct sockaddr_in sin;
-  int pcount;
   uint32_t hkey;
-  static uint16_t srcPort = BFD_SRCPORTINIT;
-  int ttlval = BFD_1HOPTTLVALUE;
   uint32_t selectedMin;
   bfdSessionInt *bfd;
-
-  if (!bfdExtCheck(BFD_EXT_SPECIFYPORTS)) {
-    if (_bfd->PeerPort != BFDDFLT_DESTPORT) {
-      bfdLog(LOG_WARNING, "Invalid remote port: %d\n", _bfd->PeerPort);
-      bfdLog(LOG_WARNING,
-             "Did you forget to enable the SpecifyPorts extension?\n");
-      return false;
-    }
-
-    if (_bfd->LocalPort != BFDDFLT_DESTPORT) {
-      bfdLog(LOG_WARNING, "Invalid local port: %d\n", _bfd->LocalPort);
-      bfdLog(LOG_WARNING,
-             "Did you forget to enable the SpecifyPorts extension?\n");
-      return false;
-    }
-  }
 
   bfd = calloc(1, sizeof(bfdSessionInt));
   if (bfd == NULL) {
@@ -596,39 +511,10 @@ bool bfdCreateSession(bfdSession *_bfd)
 
   bfd->LocalDiscr = (uint32_t)((uintptr_t)bfd & 0xffffffff);
 
-  /* Make UDP socket to receive control packets */
-  if (!bfdSetupRcvSocket(bfd)) {
+  if (!bfdSocketSetup(bfd)) {
+    free(bfd);
     return false;
   }
-
-  /* Get socket for transmitting control packets */
-  if ((bfd->Sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
-    bfdLog(LOG_WARNING, "[%x] Can't get socket for peer %s:%d: %m\n",
-           bfd->LocalDiscr, inet_ntoa(bfd->Sn.PeerAddr), bfd->Sn.PeerPort);
-    return false;
-  }
-  /* Set TTL to 255 for all transmitted packets */
-  if (setsockopt(bfd->Sock, SOL_IP, IP_TTL, &ttlval, sizeof(ttlval)) < 0) {
-    bfdLog(LOG_WARNING, "[%x] Can't set TTL for peer %s:%d: %m\n",
-           bfd->LocalDiscr, inet_ntoa(bfd->Sn.PeerAddr), bfd->Sn.PeerPort);
-    close(bfd->Sock);
-    return false;
-  }
-  /* Find an available source port in the proper range */
-  sin.sin_family = AF_INET;
-  sin.sin_addr.s_addr = INADDR_ANY;
-  pcount = 0;
-  do {
-    if ((++pcount) > (BFD_SRCPORTMAX - BFD_SRCPORTINIT)) {
-      /* Searched all ports, none available */
-      bfdLog(LOG_WARNING, "[%x] Can't find source port for peer %s:%d\n",
-             bfd->LocalDiscr, inet_ntoa(bfd->Sn.PeerAddr), bfd->Sn.PeerPort);
-      close(bfd->Sock);
-      return false;
-    }
-    if (srcPort >= BFD_SRCPORTMAX) srcPort = BFD_SRCPORTINIT;
-    sin.sin_port = htons(srcPort++);
-  } while (bind(bfd->Sock, (struct sockaddr *)&sin, sizeof(sin)) < 0);
 
   selectedMin = BFD_DOWNMINTX > bfd->Sn.DesiredMinTxInterval ?
                   BFD_DOWNMINTX : bfd->Sn.DesiredMinTxInterval;

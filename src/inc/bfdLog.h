@@ -18,9 +18,14 @@
  ****************************************************************************/
 #include <syslog.h>
 
+#ifndef __BFDLOG_H__
+#define __BFDLOG_H__
+
 /* Comment this out to prevent logging to stderr */
 #define BFD_LOGTOSTDERR
 
 void bfdLogInit(void);
 void bfdLogMore(void);
 void bfdLog(int lvl, const char *fmt, ...);
+
+#endif /* __BFDLOG_H__ */

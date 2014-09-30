@@ -2,6 +2,9 @@
 #include "bfd.h"
 #include "tp-timers.h"
 
+#ifndef __BFDINT_H__
+#define __BFDINT_H__
+
 /* Various constants */
 #define BFD_VERSION                1
 #define BFD_MINPKTLEN              24    /* Minimum length of control packet */
@@ -70,7 +73,8 @@ typedef struct _bfdSession {
   tpTimer  DetectTimer;
   uint32_t XmtTime;
   tpTimer  XmtTimer;
-  int      Sock;
+  int      TxSock;
+  int      RxSock;
 } bfdSessionInt;
 
 typedef struct _bfdNotifier {
@@ -80,8 +84,12 @@ typedef struct _bfdNotifier {
   struct _bfdNotifier *next;
 } bfdNotifier;
 
-void bfdRcvPkt(int s, void *arg);
 void bfdSendCPkt(bfdSessionInt *bfd, int fbit);
 void bfdStartXmtTimer(bfdSessionInt *bfd);
 void bfdRmSession(bfdSessionInt *bfd);
 int bfdRmFromList(bfdSessionInt **list, bfdSessionInt *bfd);
+bool bfdSocketSetup(bfdSessionInt *bfd);
+bool bfdSocketClose(bfdSessionInt *bfd);
+void bfdRcvPkt(int s, void *arg);
+
+#endif /* __BFDINT_H__ */
