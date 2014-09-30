@@ -29,6 +29,7 @@ static void bfdXmtTimeout(tpTimer *tim, void *arg);
 static void bfdSessionDown(bfdSessionInt *bfd, uint8_t diag);
 static void bfdSessionUp(bfdSessionInt *bfd);
 static void bfdDetectTimeout(tpTimer *tim, void *arg);
+static void bfdNotify(bfdSessionInt *bfd);
 
 /*
  * All received packets come through here.
@@ -202,6 +203,7 @@ void bfdRcvPkt(int s, void *arg)
     if (bfd->SessionState == BFDSTATE_DOWN) {
       if (cp->state == BFDSTATE_DOWN) {
         bfd->SessionState = BFDSTATE_INIT;
+        bfdNotify(bfd);
       } else if (cp->state == BFDSTATE_INIT) {
         bfdSessionUp(bfd);
         sendPkt = true;
@@ -242,6 +244,16 @@ void bfdRcvPkt(int s, void *arg)
     tpStopTimer(&(bfd->DetectTimer));
   }
   return;
+}
+
+static void bfdNotify(bfdSessionInt *bfd)
+{
+  bfdNotifier *notify = bfd->notify;
+
+  while (notify) {
+    notify->cb(bfd->SessionState, notify->cbArg);
+    notify = notify->next;
+  }
 }
 
 /*
@@ -293,6 +305,8 @@ static void bfdSessionDown(bfdSessionInt *bfd, uint8_t diag)
 
   bfdLog(LOG_NOTICE, "[%x] Session DOWN to peer %s\n", bfd->LocalDiscr,
          inet_ntoa(bfd->Sn.PeerAddr));
+
+  bfdNotify(bfd);
 }
 
 /*
@@ -306,6 +320,8 @@ static void bfdSessionUp(bfdSessionInt *bfd)
 
   bfdLog(LOG_NOTICE, "[%x] Session UP to peer %s\n", bfd->LocalDiscr,
          inet_ntoa(bfd->Sn.PeerAddr));
+
+  bfdNotify(bfd);
 }
 
 /*
@@ -679,6 +695,7 @@ void bfdToggleAdminDown(int sig)
       bfdXmtTimeout(&(bfd->XmtTimer), bfd);
       bfdLog(LOG_NOTICE, "[%x] Session to peer %s:%d enabled\n",
              bfd->LocalDiscr, inet_ntoa(bfd->Sn.PeerAddr), bfd->Sn.PeerPort);
+      bfdNotify(bfd);
     } else {
       uint32_t selectedMin;
 
@@ -698,6 +715,7 @@ void bfdToggleAdminDown(int sig)
       tpStopTimer(&(bfd->DetectTimer));
       bfdLog(LOG_NOTICE, "[%x] Session to peer %s:%d disabled\n",
              bfd->LocalDiscr, inet_ntoa(bfd->Sn.PeerAddr), bfd->Sn.PeerPort);
+      bfdNotify(bfd);
     }
   }
 }
