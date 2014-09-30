@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <json.h>
+#include <arpa/inet.h>
 
 #include "avl.h"
 #include "bfd.h"
@@ -14,17 +15,6 @@
 #include "bfdLog.h"
 
 #define BUF_SZ 1024
-
-/* A SessionID uniquely identifies a session and is used to create the
-   bfdSession object. */
-
-typedef struct SessionID {
-  uint16_t localPort;
-  uint16_t peerPort;
-  const char *localIP;
-  const char *peerIP;
-} SessionID_t;
-
 
 /* A Monitor is unique for a given (Connection, SessionID) pair. Each
    Monitor is referenced in a table for the Connection and in a table
@@ -35,11 +25,11 @@ typedef struct SessionID {
 
 typedef struct Monitor {
   int sock;
-  SessionID_t sid;
+  bfdSession Sn;
 
   // If -1, then all sessions??? NULL, not subscribed yet. If
   // non-NULL, not modified by subscribe API.
-  bfdSession *bfd;
+  bfdSubHndl *bfdHandle;
 } Monitor_t;
 
 /* Each monitor Connection needs to keep a list of all the Monitors
@@ -54,35 +44,20 @@ typedef struct Connection {
 
 static avl_tree *connectionTree;
 
-static int bfdMonitorSessionIdCompare(SessionID_t *s1, SessionID_t *s2)
+static int bfdMonitorSessionIdCompare(bfdSession *s1, bfdSession *s2)
 {
-    int cmp = 0;
+  int cmp = (int)(s1->PeerAddr.s_addr) - (int)(s2->PeerAddr.s_addr);
 
-    if (s1->peerIP && s2->peerIP) {
-        cmp = strcmp(s1->peerIP, s2->peerIP);
-    } else if (s1->peerIP) {
-        cmp = 1;
-    } else if (s2->peerIP) {
-        cmp = -1;
+    if (cmp == 0) {
+      cmp = (int)(s1->LocalAddr.s_addr) - (int)(s2->LocalAddr.s_addr);
     }
 
     if (cmp == 0) {
-        if (s1->localIP && s2->localIP) {
-            cmp = strcmp(s1->localIP, s2->localIP);
-        } else {
-            if (s1->localIP) {
-                cmp = 1;
-            } else if (s2->localIP) {
-                cmp = -1;
-            }
-        }
+      cmp = s1->PeerPort - s2->PeerPort;
     }
 
     if (cmp == 0) {
-        cmp = s1->peerPort - s2->peerPort;
-        if (cmp == 0) {
-            cmp = s1->localPort - s2->localPort;
-        }
+      cmp = s1->LocalPort - s2->LocalPort;
     }
 
     return cmp;
@@ -93,11 +68,13 @@ static int bfdMonitorCompare(const void *v1, const void *v2, void *param)
     Monitor_t *m1 = (Monitor_t *)v1;
     Monitor_t *m2 = (Monitor_t *)v2;
 
-    if (m1->sock == m2->sock) {
-      return bfdMonitorSessionIdCompare(&m1->sid, &m2->sid);
+    int cmp = m1->sock - m2->sock;
+
+    if (cmp == 0) {
+      return bfdMonitorSessionIdCompare(&m1->Sn, &m2->Sn);
     }
 
-    return (m1->sock - m2->sock);
+    return cmp;
 }
 
 static Monitor_t *bfdMonitorCreateCopy(Monitor_t *other)
@@ -108,11 +85,7 @@ static Monitor_t *bfdMonitorCreateCopy(Monitor_t *other)
     exit(1);
   }
 
-  mon->sock = other->sock;
-  mon->sid.localPort = other->sid.localPort;
-  mon->sid.peerPort  = other->sid.peerPort;
-  mon->sid.localIP   = strdup(other->sid.localIP);
-  mon->sid.peerIP    = strdup(other->sid.peerIP);
+  memcpy(mon, other, sizeof(Monitor_t));
 
   return mon;
 }
@@ -120,9 +93,6 @@ static Monitor_t *bfdMonitorCreateCopy(Monitor_t *other)
 static void bfdMonitorDestroy(Monitor_t *mon)
 {
   if (mon) {
-    free((void *)mon->sid.localIP);
-    free((void *)mon->sid.peerIP);
-
     // TODO: Free up bfd session object if needed. There might be some
     // goofy logic here if we want to have a monitor which watches all
     // sessions.
@@ -179,46 +149,70 @@ static void bfdMonitorConnectionClose(Connection_t *conn)
   }
 }
 
-static void bfdMonitorProcessSessionId(json_object *jso, SessionID_t *sid)
+/*
+ * Returns 0 on success, -1 on failure to extract session id from json.
+ */
+static int bfdMonitorProcessSessionId(json_object *jso, bfdSession *sn)
 {
   json_object *sid_jso;
   json_object *item;
+  const char *str;
 
   json_object_object_get_ex(jso, "SessionID", &sid_jso);
   if (!sid_jso) {
     bfdLog(LOG_ERR, "Missing 'SessionID' in json packet\n");
-    return;
+    return -1;
   }
 
-  sid->peerIP = NULL;
+  sn->PeerAddr.s_addr = 0;
   json_object_object_get_ex(sid_jso, "PeerIP", &item);
   if (item) {
-    sid->peerIP = json_object_get_string(item);
+    str = json_object_get_string(item);
+    if (inet_aton(str, &sn->PeerAddr) == 0) {
+      bfdLog(LOG_ERR, "Failed to convert 'PeerIP' to IP address: %s\n", str);
+      return -1;
+    }
+  } else {
+    bfdLog(LOG_ERR, "Missing 'PeerIP' in json packet\n");
+    return -1;
   }
 
-  sid->localIP = NULL;
+  /* All of the following are optional, do not generate an error on
+     failure to convert. */
+
+  sn->LocalAddr.s_addr = INADDR_ANY;
   json_object_object_get_ex(sid_jso, "LocalIP", &item);
   if (item) {
-    sid->localIP = json_object_get_string(item);
+    str = json_object_get_string(item);
+    if (inet_aton(str, &sn->LocalAddr) == 0) {
+      bfdLog(LOG_WARNING, "Failed to convert 'LocalIP' to IP address: %s\n",
+             str);
+
+      /* TODO: Need to check if local addr is associated with an interface. */
+    }
+  } else {
+    bfdLog(LOG_INFO, "Missing optional 'LocalIP' in json packet\n");
   }
 
-  sid->peerPort = 0;
+  sn->PeerPort = 0;
   json_object_object_get_ex(sid_jso, "PeerPort", &item);
   if (item) {
-    sid->peerPort = (uint16_t)(json_object_get_int(item) & 0xffff);
+    sn->PeerPort = (uint16_t)(json_object_get_int(item) & 0xffff);
   }
 
-  sid->localPort = 0;
+  sn->LocalPort = 0;
   json_object_object_get_ex(sid_jso, "LocalPort", &item);
   if (item) {
-    sid->localPort = (uint16_t)(json_object_get_int(item) & 0xffff);
+    sn->LocalPort = (uint16_t)(json_object_get_int(item) & 0xffff);
   }
 
   bfdLog(LOG_INFO, "SessionID gathered:\n");
-  bfdLog(LOG_INFO, "  PeerIP is '%s'\n", sid->peerIP);
-  bfdLog(LOG_INFO, "  LocalIP is '%s'\n", sid->localIP);
-  bfdLog(LOG_INFO, "  PeerPort is '%d'\n", sid->peerPort);
-  bfdLog(LOG_INFO, "  LocalPort is '%d'\n", sid->localPort);
+  bfdLog(LOG_INFO, "  PeerIP is '%s'\n", inet_ntoa(sn->PeerAddr));
+  bfdLog(LOG_INFO, "  LocalIP is '%s'\n", inet_ntoa(sn->LocalAddr));
+  bfdLog(LOG_INFO, "  PeerPort is '%d'\n", sn->PeerPort);
+  bfdLog(LOG_INFO, "  LocalPort is '%d'\n", sn->LocalPort);
+
+  return 0;
 }
 
 typedef void (*CmdHandler_t)(Connection_t *conn, json_object *jso);
@@ -234,7 +228,11 @@ static void handler_Subscribe(Connection_t *conn, json_object *jso)
   Monitor_t *mon;
 
   bfdLog(LOG_INFO, "Processing 'Subscribe' command\n");
-  bfdMonitorProcessSessionId(jso, &find->sid);
+
+  if (bfdMonitorProcessSessionId(jso, &find->Sn) < 0) {
+    bfdLog(LOG_WARNING, "MONITOR: unable to extract session id from json.\n");
+    return;
+  }
 
   // Look for an existing subscription on this connection.
   mon = avl_find(conn->monitorTree, find);
@@ -255,7 +253,11 @@ static void handler_Unsubscribe(Connection_t *conn, json_object *jso)
   Monitor_t *mon;
 
   bfdLog(LOG_INFO, "Processing 'Unsubscribe' command\n");
-  bfdMonitorProcessSessionId(jso, &find->sid);
+
+  if (bfdMonitorProcessSessionId(jso, &find->Sn) < 0) {
+    bfdLog(LOG_WARNING, "MONITOR: unable to extract session id from json.\n");
+    return;
+  }
 
   mon = avl_delete(conn->monitorTree, find);
   if (mon) {

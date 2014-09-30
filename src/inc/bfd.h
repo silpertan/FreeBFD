@@ -42,6 +42,7 @@ typedef struct {
    * fields identifies a specific session
    */
   struct in_addr PeerAddr;
+  struct in_addr LocalAddr;     /* TODO: Can the monitor app even know this? */
   uint16_t PeerPort;
   uint16_t LocalPort;
 

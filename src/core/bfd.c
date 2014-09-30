@@ -407,6 +407,7 @@ static bfdSessionInt *bfdMatchSession(bfdSession *_bfd)
   hkey = BFD_MKHKEY(_bfd->PeerAddr.s_addr);
   for (bfd = peerHash[hkey]; bfd != NULL; bfd = bfd->PeerNext) {
     if (bfd->Sn.PeerAddr.s_addr == _bfd->PeerAddr.s_addr &&
+        bfd->Sn.LocalAddr.s_addr == _bfd->LocalAddr.s_addr &&
         bfd->Sn.PeerPort == _bfd->PeerPort &&
         bfd->Sn.LocalPort == _bfd->LocalPort)
     {
