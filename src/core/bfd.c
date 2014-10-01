@@ -502,9 +502,14 @@ void bfdUnsubscribe(bfdSubHndl hndl)
     }
   }
 
+  bfdLog(LOG_DEBUG, "[%x] bfdUnsubscribe: peer=%s:%d local=%s:%d\n",
+         bfd->LocalDiscr, bfd->Sn.PeerAddrStr, bfd->Sn.PeerPort,
+         bfd->Sn.LocalAddrStr, bfd->Sn.LocalPort);
+
   free(notify);
 
   /* if there are no more listeners for the session, delete it */
+  bfd->RefCnt--;
   if (bfd->RefCnt <= 0) {
     bfdRmSession(bfd);
   }
