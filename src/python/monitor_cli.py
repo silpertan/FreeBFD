@@ -15,11 +15,24 @@ CTRL_ADDR = ('localhost', 5643)
 READ_ONLY = select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR
 
 class SessionID(object):
-    def __init__(self, peer, local=None, peerPort=None, localPort=None):
-        self.peer = peer
-        self.local = local
-        self.peerPort = peerPort
-        self.localPort = localPort
+    def __init__(self, peer, local=None):
+        self.local = socket.inet_ntoa(socket.inet_aton('0'))
+        self.peerPort = '0'
+        self.localPort = '0'
+
+        peer = peer.split(':', 1)
+        self.peer = peer[0]
+        if len(peer) > 1:
+            self.peerPort = peer[1]
+
+        if local is not None:
+            local = local.split(':', 1)
+            try:
+                self.local = socket.inet_ntoa(socket.inet_aton(local[0]))
+            except socket.error as e:
+                sys.stderr.write('WARNING: %s: %s\n' % (str(e), local[0]))
+            if len(local) > 1 and local[1]:
+                self.localPort = local[1]
 
     def to_port(self, port):
         try:
@@ -82,21 +95,26 @@ class Commander(cmd.Cmd):
     def do_subscribe(self, line):
         '''Subscribe to a session.
 
-        Argument can be '<peer-ip> [<local-ip> [<peer-port> [<local-port>]]]'.
+        Argument can be '<peer-addr>[:<peer-port>] [<local-addr>[:<local-port>]]'.
         '''
         argv = line.split()
-        msg = MonitorMsg('Subscribe', SessionID(*argv))
-        self.sock.sendall(msg.to_json())
+        if argv:
+            msg = MonitorMsg('Subscribe', SessionID(*argv))
+            self.sock.sendall(msg.to_json())
+        else:
+            sys.stderr.write("Missing required arguments.\n")
 
     def do_unsubscribe(self, line):
         '''Unsubscribe from a session.
 
-        Argument can be '<peer-ip> [<local-ip> [<peer-port> [<local-port>]]]'.
+        Argument can be '<peer-ip>[:<peer-port>] [<local-ip>[:<local-port>]]'.
         '''
         argv = line.split()
-        msg = MonitorMsg('Unsubscribe', SessionID(*argv))
-        self.sock.sendall(msg.to_json())
-
+        if argv:
+            msg = MonitorMsg('Unsubscribe', SessionID(*argv))
+            self.sock.sendall(msg.to_json())
+        else:
+            sys.stderr.write("Missing required arguments.\n")
 
 def main():
     poller = select.poll()
