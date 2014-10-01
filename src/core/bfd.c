@@ -25,6 +25,7 @@ static bfdSessionInt *peerHash[BFD_HASHSIZE];       /* Find session from peer ad
 
 static bfdSessionInt *bfdGetSession(bfdCpkt *cp, struct sockaddr_in *sin);
 static bfdSessionInt *bfdMatchSession(bfdSession *_bfd);
+static bfdSessionInt *bfdCreateSessionInt(bfdSession *_bfd);
 static void bfdXmtTimeout(tpTimer *tim, void *arg);
 static void bfdSessionDown(bfdSessionInt *bfd, uint8_t diag);
 static void bfdSessionUp(bfdSessionInt *bfd);
@@ -439,7 +440,7 @@ bfdSubHndl bfdSubscribe(bfdSession *_bfd, bfdSubCB cb, void *arg)
 
   /* determine if the session exists or needs to be created */
   if ((bfd = bfdMatchSession(_bfd)) == NULL) {
-    if (!bfdCreateSession(_bfd)) { return NULL; }
+    if ((bfd = bfdCreateSessionInt(_bfd)) == NULL) { return NULL; }
   } else {
     bfdLog(LOG_NOTICE, "[%x] Adding notifier to session with peer %s:%d\n",
            bfd->LocalDiscr, bfd->Sn.PeerAddrStr, bfd->Sn.PeerPort);
@@ -512,7 +513,7 @@ void bfdUnsubscribe(bfdSubHndl hndl)
 /*
  * Make a session object
  */
-bool bfdCreateSession(bfdSession *_bfd)
+static bfdSessionInt *bfdCreateSessionInt(bfdSession *_bfd)
 {
   uint32_t hkey;
   uint32_t selectedMin;
@@ -521,7 +522,7 @@ bool bfdCreateSession(bfdSession *_bfd)
   bfd = calloc(1, sizeof(bfdSessionInt));
   if (bfd == NULL) {
     bfdLog(LOG_ERR, "Unable to allocate BFD session: %m\n");
-    return false;
+    return NULL;
   }
 
   memcpy(&bfd->Sn, _bfd, sizeof(bfdSession));
@@ -530,7 +531,7 @@ bool bfdCreateSession(bfdSession *_bfd)
 
   if (!bfdSocketSetup(bfd)) {
     free(bfd);
-    return false;
+    return NULL;
   }
 
   selectedMin = BFD_DOWNMINTX > bfd->Sn.DesiredMinTxInterval ?
@@ -554,6 +555,15 @@ bool bfdCreateSession(bfdSession *_bfd)
   bfdXmtTimeout(&(bfd->XmtTimer), bfd);
   bfdLog(LOG_NOTICE, "[%x] Created new session with peer=%s:%d\n",
          bfd->LocalDiscr, bfd->Sn.PeerAddrStr, bfd->Sn.PeerPort);
+
+  return bfd;
+}
+
+bool bfdCreateSession(bfdSession *_bfd)
+{
+  if (bfdCreateSessionInt(_bfd) == NULL) {
+    return false;
+  }
   return true;
 }
 
