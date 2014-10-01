@@ -26,10 +26,7 @@
 typedef struct Monitor {
   int sock;
   bfdSession Sn;
-
-  // If -1, then all sessions??? NULL, not subscribed yet. If
-  // non-NULL, not modified by subscribe API.
-  bfdSubHndl *bfdHandle;
+  bfdSubHndl *bfdSubHandle;
 } Monitor_t;
 
 /* Each monitor Connection needs to keep a list of all the Monitors
@@ -105,7 +102,21 @@ static void bfdMonitorDestroy(Monitor_t *mon)
 static void bfdMonitorDestroyNode(void *data, void *param)
 {
   Monitor_t *mon = (Monitor_t *)data;
+  bfdUnsubscribe(mon->bfdSubHandle);
   bfdMonitorDestroy(mon);
+}
+
+/* Callback to be installed in session via bfdSubscribe() during
+   subscribe operation. */
+static void bfdMonitorNotify(bfdState state, void *arg)
+{
+  Monitor_t *mon = (Monitor_t *)arg;
+
+  // TODO: send out notification to connected monitor application.
+  bfdLog(LOG_DEBUG, "MONITOR[%d]: Sending notification: Peer=%s:%d "
+         "Local=%s:%d State=%s\n",
+         mon->sock, mon->Sn.PeerAddrStr, mon->Sn.PeerPort,
+         mon->Sn.LocalAddrStr, mon->Sn.LocalPort, bfdStateToStr(state));
 }
 
 static int bfdMonitorConnectionCompare(const void *v1, const void *v2,
@@ -229,6 +240,7 @@ static void handler_Subscribe(Connection_t *conn, json_object *jso)
 {
   Monitor_t find[1] = {{ .sock = conn->sock }};
   Monitor_t *mon;
+  bfdSubHndl sub;
 
   bfdLog(LOG_INFO, "Processing 'Subscribe' command\n");
 
@@ -242,9 +254,16 @@ static void handler_Subscribe(Connection_t *conn, json_object *jso)
   if (!mon) {
     // This is a new subscription request.
     mon = bfdMonitorCreateCopy(find);
-    avl_insert(conn->monitorTree, mon);
-    // TODO: Subscribe to session. May create a session or attach to an existing session.
-    bfdLog(LOG_DEBUG, "MONITOR[%d]: created monitor\n", conn->sock);
+    sub = bfdSubscribe(&mon->Sn, bfdMonitorNotify, mon);
+    if (sub) {
+      mon->bfdSubHandle = sub;
+      avl_insert(conn->monitorTree, mon);
+      bfdLog(LOG_DEBUG, "MONITOR[%d]: created monitor\n", conn->sock);
+    } else {
+      bfdMonitorDestroy(mon);
+      bfdLog(LOG_DEBUG, "MONITOR[%d]: failed to subscribe monitor.\n",
+             conn->sock);
+    }
   } else {
     bfdLog(LOG_DEBUG, "MONITOR[%d]: monitor already exists\n", conn->sock);
   }
@@ -265,8 +284,7 @@ static void handler_Unsubscribe(Connection_t *conn, json_object *jso)
 
   mon = avl_delete(conn->monitorTree, find);
   if (mon) {
-    // TODO: Unsubscribe from a session.
-
+    bfdUnsubscribe(mon->bfdSubHandle);
     bfdMonitorDestroy(mon);
   }
 }
