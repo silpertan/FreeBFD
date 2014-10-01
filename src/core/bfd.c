@@ -553,8 +553,9 @@ static bfdSessionInt *bfdCreateSessionInt(bfdSession *_bfd)
   peerHash[hkey] = bfd;
   /* Start transmitting control packets */
   bfdXmtTimeout(&(bfd->XmtTimer), bfd);
-  bfdLog(LOG_NOTICE, "[%x] Created new session with peer=%s:%d\n",
-         bfd->LocalDiscr, bfd->Sn.PeerAddrStr, bfd->Sn.PeerPort);
+  bfdLog(LOG_NOTICE, "[%x] Created new session with peer=%s:%d, local=%s:%d\n",
+         bfd->LocalDiscr, bfd->Sn.PeerAddrStr, bfd->Sn.PeerPort,
+         bfd->Sn.LocalAddrStr, bfd->Sn.LocalPort);
 
   return bfd;
 }

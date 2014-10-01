@@ -93,12 +93,12 @@ static Monitor_t *bfdMonitorCreateCopy(Monitor_t *other)
 static void bfdMonitorDestroy(Monitor_t *mon)
 {
   if (mon) {
-    // TODO: Free up bfd session object if needed. There might be some
-    // goofy logic here if we want to have a monitor which watches all
-    // sessions.
-  }
+    bfdLog(LOG_DEBUG, "MONITOR[%d]: destroying monitor: Peer=%s:%d, "
+           "Local=%s:%d\n", mon->sock, mon->Sn.PeerAddrStr, mon->Sn.PeerPort,
+           mon->Sn.LocalAddrStr, mon->Sn.LocalPort);
 
-  free(mon);
+    free(mon);
+  }
 }
 
 /* Used by avl_destroy() to remove all nodes from the tree. */
@@ -244,9 +244,9 @@ static void handler_Subscribe(Connection_t *conn, json_object *jso)
     mon = bfdMonitorCreateCopy(find);
     avl_insert(conn->monitorTree, mon);
     // TODO: Subscribe to session. May create a session or attach to an existing session.
-    bfdLog(LOG_DEBUG, "MONITOR: created monitor\n");
+    bfdLog(LOG_DEBUG, "MONITOR[%d]: created monitor\n", conn->sock);
   } else {
-    bfdLog(LOG_DEBUG, "MONITOR: monitor already exists\n");
+    bfdLog(LOG_DEBUG, "MONITOR[%d]: monitor already exists\n", conn->sock);
   }
 }
 
@@ -255,10 +255,11 @@ static void handler_Unsubscribe(Connection_t *conn, json_object *jso)
   Monitor_t find[1] = {{ .sock = conn->sock }};
   Monitor_t *mon;
 
-  bfdLog(LOG_INFO, "Processing 'Unsubscribe' command\n");
+  bfdLog(LOG_INFO, "MONITOR[%d] Processing 'Unsubscribe' command\n", conn->sock);
 
   if (bfdMonitorProcessSessionId(jso, &find->Sn) < 0) {
-    bfdLog(LOG_WARNING, "MONITOR: unable to extract session id from json.\n");
+    bfdLog(LOG_WARNING, "MONITOR[%d]: unable to extract session id from json.\n",
+           conn->sock);
     return;
   }
 
@@ -267,7 +268,6 @@ static void handler_Unsubscribe(Connection_t *conn, json_object *jso)
     // TODO: Unsubscribe from a session.
 
     bfdMonitorDestroy(mon);
-    bfdLog(LOG_DEBUG, "MONITOR: destroyed monitor\n");
   }
 }
 
@@ -292,7 +292,7 @@ static void bfdMonitorProcessCmd(Connection_t *conn, const char *cmd,
     ent++;
   }
 
-  bfdLog(LOG_ERR, "MONITOR: Unknown command: %s\n", cmd);
+  bfdLog(LOG_ERR, "MONITOR[%d]: Unknown command: %s\n", conn->sock, cmd);
 }
 
 /* NOTE: Must do a json_object_put(obj) when done with an object to
@@ -303,7 +303,7 @@ static void bfdMonitorProcessPkt(Connection_t *conn, char *buf)
   json_object *obj = json_tokener_parse(buf);
 
   if (!obj) {
-    bfdLog(LOG_ERR, "failed to parse json\n");
+    bfdLog(LOG_ERR, "MONITOR[%d] failed to parse json\n", conn->sock);
     return;
   }
 
@@ -315,7 +315,8 @@ static void bfdMonitorProcessPkt(Connection_t *conn, char *buf)
     const char *cmd = json_object_get_string(cmd_obj);
     bfdMonitorProcessCmd(conn, cmd, obj);
   } else {
-    bfdLog(LOG_ERR, "expected 'MsgType' in json not found\n");
+    bfdLog(LOG_ERR, "MONITOR[%d] expected 'MsgType' in json not found\n",
+           conn->sock);
   }
 
   json_object_put(obj);
@@ -333,7 +334,7 @@ static void bfdMonitorRecvPkt(int sock, void *arg)
     if (errno == EINTR)
       return;
 
-    bfdLog(LOG_ERR, "Monitor failed in read(): %m\n");
+    bfdLog(LOG_ERR, "MONITOR[%d] failed in read(): %m\n", sock);
   } else if (res == 0) {
     /* EOF on stream. Close connection and remove actor. */
     bfdMonitorConnectionClose(conn);
@@ -356,7 +357,7 @@ static void bfdMonitorConnection(int server, void *arg)
   Connection_t *conn;
 
   if ((sock = accept(server, (struct sockaddr *)NULL, NULL)) < 0) {
-    bfdLog(LOG_ERR, "Failed call to accept(): %m\n");
+    bfdLog(LOG_ERR, "MONITOR: Failed call to accept(): %m\n");
     return;
   }
 
@@ -379,12 +380,12 @@ void bfdMonitorSetupServer(uint16_t port)
   connectionTree = avl_create(bfdMonitorConnectionCompare, NULL);
 
   if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-    bfdLog(LOG_ERR, "Can't get monitor socket: %m\n");
+    bfdLog(LOG_ERR, "MONITOR: Can't get monitor socket: %m\n");
     exit(1);
   }
 
   if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0) {
-    bfdLog(LOG_ERR, "Can't set socket option REUSEADDR: %m\n");
+    bfdLog(LOG_ERR, "MONITOR: Can't set socket option REUSEADDR: %m\n");
     exit(1);
   }
 
@@ -393,16 +394,16 @@ void bfdMonitorSetupServer(uint16_t port)
   sin.sin_port        = htons(port);
 
   if (bind(sock, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
-    bfdLog(LOG_ERR, "Can't bind socket to port %d: %m\n", port);
+    bfdLog(LOG_ERR, "MONITOR: Can't bind socket to port %d: %m\n", port);
     exit(1);
   }
 
   if (listen(sock, 5) < 0) {
-    bfdLog(LOG_ERR, "Can't listen on socket: %m\n");
+    bfdLog(LOG_ERR, "MONITOR: Can't listen on socket: %m\n");
     exit(1);
   }
 
-  bfdLog(LOG_INFO, "Waiting for Monitor connections\n");
+  bfdLog(LOG_INFO, "MONITOR: Waiting for connections\n");
 
   /* Add socket to select poll. */
   tpSetSktActor(sock, bfdMonitorConnection, NULL, NULL);
