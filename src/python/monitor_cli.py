@@ -46,12 +46,12 @@ class MonitorMsg(object):
         self.msg = {
             'MsgType': msgtype,
             'SessionID' : {
-                'PeerIP' : sess_id.peer
+                'PeerAddr' : sess_id.peer
             }
         }
 
         if sess_id.local is not None:
-            self.msg['SessionID']['LocalIP'] = sess_id.local
+            self.msg['SessionID']['LocalAddr'] = sess_id.local
 
         if sess_id.peerPort is not None:
             self.msg['SessionID']['PeerPort'] = sess_id.PeerPort()

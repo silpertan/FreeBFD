@@ -71,8 +71,8 @@ These are sent from the monitor application to the **bfd** daemon.
     {
         "MsgType" : "Subscribe",
         "SessionID" : {
-            "PeerIP" : "<ip-addr>",
-            "LocalIP" : "<ip-addr>",
+            "PeerAddr" : "<ip-addr>",
+            "LocalAddr" : "<ip-addr>",
             "PeerPort" : <int>,   // Optional: Defaults to 3784
             "LocalPort" : <int>,  // Optional: Defaults to 3784
         },
@@ -89,8 +89,8 @@ These are sent from the monitor application to the **bfd** daemon.
     {
         "MsgType" : "Unsubscribe",
         "SessionID" : {
-            "PeerIP" : "<ip-addr>",
-            "LocalIP" : "<ip-addr>",
+            "PeerAddr" : "<ip-addr>",
+            "LocalAddr" : "<ip-addr>",
             "PeerPort" : <int>,   // Optional: Defaults to 3784
             "LocalPort" : <int>,  // Optional: Defaults to 3784
         }
@@ -106,8 +106,8 @@ These are sent from the **bfd** daemon to the monitor applications.
     {
         "MsgType" : "Notify",
         "SessionID" : {
-            "PeerIP" : "<ip-addr>",
-            "LocalIP" : "<ip-addr>",
+            "PeerAddr" : "<ip-addr>",
+            "LocalAddr" : "<ip-addr>",
             "PeerPort" : <int>,   // Optional: Defaults to 3784
             "LocalPort" : <int>,  // Optional: Defaults to 3784
         },

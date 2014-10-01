@@ -176,17 +176,17 @@ static int bfdMonitorProcessSessionId(json_object *jso, bfdSession *sn)
   }
 
   sn->PeerAddr.s_addr = 0;
-  json_object_object_get_ex(sid_jso, "PeerIP", &item);
+  json_object_object_get_ex(sid_jso, "PeerAddr", &item);
   if (item) {
     str = json_object_get_string(item);
     if (inet_aton(str, &sn->PeerAddr) == 0) {
-      bfdLog(LOG_ERR, "Failed to convert 'PeerIP' to IP address: %s\n", str);
+      bfdLog(LOG_ERR, "Failed to convert 'PeerAddr' to IP address: %s\n", str);
       return -1;
     } else {
       strncpy(sn->PeerAddrStr, inet_ntoa(sn->PeerAddr), BFD_ADDR_STR_SZ);
     }
   } else {
-    bfdLog(LOG_ERR, "Missing 'PeerIP' in json packet\n");
+    bfdLog(LOG_ERR, "Missing 'PeerAddr' in json packet\n");
     return -1;
   }
 
@@ -194,18 +194,18 @@ static int bfdMonitorProcessSessionId(json_object *jso, bfdSession *sn)
      failure to convert. */
 
   sn->LocalAddr.s_addr = INADDR_ANY;
-  json_object_object_get_ex(sid_jso, "LocalIP", &item);
+  json_object_object_get_ex(sid_jso, "LocalAddr", &item);
   if (item) {
     str = json_object_get_string(item);
     if (inet_aton(str, &sn->LocalAddr) == 0) {
-      bfdLog(LOG_WARNING, "Failed to convert 'LocalIP' to IP address: %s\n",
+      bfdLog(LOG_WARNING, "Failed to convert 'LocalAddr' to IP address: %s\n",
              str);
     } else {
       strncpy(sn->LocalAddrStr, inet_ntoa(sn->LocalAddr), BFD_ADDR_STR_SZ);
       /* TODO: Need to check if local addr is associated with an interface. */
     }
   } else {
-    bfdLog(LOG_INFO, "Missing optional 'LocalIP' in json packet\n");
+    bfdLog(LOG_INFO, "Missing optional 'LocalAddr' in json packet\n");
   }
 
   sn->PeerPort = 0;
@@ -221,8 +221,8 @@ static int bfdMonitorProcessSessionId(json_object *jso, bfdSession *sn)
   }
 
   bfdLog(LOG_INFO, "SessionID gathered:\n");
-  bfdLog(LOG_INFO, "  PeerIP is '%s'\n", sn->PeerAddrStr);
-  bfdLog(LOG_INFO, "  LocalIP is '%s'\n", sn->LocalAddrStr);
+  bfdLog(LOG_INFO, "  PeerAddr is '%s'\n", sn->PeerAddrStr);
+  bfdLog(LOG_INFO, "  LocalAddr is '%s'\n", sn->LocalAddrStr);
   bfdLog(LOG_INFO, "  PeerPort is '%d'\n", sn->PeerPort);
   bfdLog(LOG_INFO, "  LocalPort is '%d'\n", sn->LocalPort);
 
