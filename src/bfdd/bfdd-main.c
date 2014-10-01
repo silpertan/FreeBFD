@@ -166,6 +166,7 @@ int main(int argc, char **argv)
     for (i=0; i<cnt; i++) {
       struct hostent *hp;
       struct in_addr peeraddr;
+      struct in_addr localaddr = { .s_addr = INADDR_ANY };
       const char *connectaddr = NULL;
       int32_t peerPort;
       int32_t localport;
@@ -260,9 +261,6 @@ int main(int argc, char **argv)
 
       memcpy(&peeraddr, hp->h_addr, sizeof(peeraddr));
 
-      bfdLog(LOG_INFO, "Creating session %d with %s (%s)\n", i, connectaddr,
-             inet_ntoa(peeraddr));
-
       memset(&bfd, 0, sizeof(bfdSession));
 
       bfd.DemandMode            = (uint8_t)(demandMode & 0x1);
@@ -270,8 +268,15 @@ int main(int argc, char **argv)
       bfd.DesiredMinTxInterval  = (uint32_t)desMinTx;
       bfd.RequiredMinRxInterval = (uint32_t)reqMinRx;
       bfd.PeerAddr              = peeraddr;
+      bfd.LocalAddr             = localaddr;
       bfd.PeerPort              = (uint16_t)peerPort;
       bfd.LocalPort             = (uint16_t)localport;
+
+      strncpy(bfd.PeerAddrStr, inet_ntoa(peeraddr), BFD_ADDR_STR_SZ);
+      strncpy(bfd.LocalAddrStr, inet_ntoa(localaddr), BFD_ADDR_STR_SZ);
+
+      bfdLog(LOG_INFO, "Creating session %d with %s (%s)\n", i, connectaddr,
+             bfd.PeerAddrStr);
 
       if (!bfdCreateSession(&bfd)) {
         bfdLog(LOG_ERR, "Can't create session %d: %m\n", i);

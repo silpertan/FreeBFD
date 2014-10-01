@@ -65,6 +65,7 @@ int main(int argc, char **argv)
   char *cptr;
   struct hostent *hp;
   struct in_addr peeraddr;
+  struct in_addr localaddr = { .s_addr = INADDR_ANY };
   uint16_t peerPort = BFDDFLT_UDPPORT;
   uint16_t localPort = BFDDFLT_UDPPORT;
 
@@ -187,10 +188,6 @@ int main(int argc, char **argv)
 
   memcpy(&peeraddr, hp->h_addr, sizeof(peeraddr));
 
-  /* Make the initial session */
-  bfdLog(LOG_INFO, "Creating initial session with %s (%s)\n", connectaddr,
-         inet_ntoa(peeraddr));
-
   memset(&bfd, 0, sizeof(bfdSession));
 
   bfd.DemandMode            = defDemandModeDesired;
@@ -198,8 +195,16 @@ int main(int argc, char **argv)
   bfd.DesiredMinTxInterval  = defDesiredMinTx;
   bfd.RequiredMinRxInterval = defRequiredMinRx;
   bfd.PeerAddr              = peeraddr;
+  bfd.LocalAddr             = localaddr;
   bfd.PeerPort              = peerPort;
   bfd.LocalPort             = localPort;
+
+  strncpy(bfd.PeerAddrStr, inet_ntoa(peeraddr), BFD_ADDR_STR_SZ);
+  strncpy(bfd.LocalAddrStr, inet_ntoa(localaddr), BFD_ADDR_STR_SZ);
+
+  /* Make the initial session */
+  bfdLog(LOG_INFO, "Creating initial session with %s (%s)\n", connectaddr,
+         bfd.PeerAddrStr);
 
   if (!bfdCreateSession(&bfd)) {
     bfdLog(LOG_ERR, "Can't creating initial session: %m\n");

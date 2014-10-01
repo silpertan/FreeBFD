@@ -15,6 +15,8 @@
 #define BFDDFLT_REQUIREDMINRX   50000
 #define BFDDFLT_UDPPORT         ((uint16_t)3784)
 
+#define BFD_ADDR_STR_SZ 20
+
 typedef enum {
   BFDSTATE_ADMINDOWN = 0,
   BFDSTATE_DOWN      = 1,
@@ -45,6 +47,10 @@ typedef struct {
   struct in_addr LocalAddr;     /* TODO: Can the monitor app even know this? */
   uint16_t PeerPort;
   uint16_t LocalPort;
+
+  /* Convenience variables to avoid issues with inet_ntoa(). */
+  char PeerAddrStr[BFD_ADDR_STR_SZ];
+  char LocalAddrStr[BFD_ADDR_STR_SZ];
 
   /* Session Parameters */
   bool     DemandMode;

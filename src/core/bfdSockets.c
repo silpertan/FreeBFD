@@ -153,7 +153,7 @@ static bool setupTxSocket(bfdSessionInt *bfd)
   /* Get socket for transmitting control packets */
   if ((sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
     bfdLog(LOG_WARNING, "[%x] Can't create socket for peer %s:%d: %m\n",
-           bfd->LocalDiscr, inet_ntoa(bfd->Sn.PeerAddr), bfd->Sn.PeerPort);
+           bfd->LocalDiscr, bfd->Sn.PeerAddrStr, bfd->Sn.PeerPort);
 
     return false;
   }
@@ -161,7 +161,7 @@ static bool setupTxSocket(bfdSessionInt *bfd)
   /* Set TTL to 255 for all transmitted packets */
   if (setsockopt(sock, SOL_IP, IP_TTL, &ttlval, sizeof(ttlval)) < 0) {
     bfdLog(LOG_WARNING, "[%x] Can't set TTL for pkts to peer %s:%d: %m\n",
-           bfd->LocalDiscr, inet_ntoa(bfd->Sn.PeerAddr), bfd->Sn.PeerPort);
+           bfd->LocalDiscr, bfd->Sn.PeerAddrStr, bfd->Sn.PeerPort);
 
     close(sock);
 
@@ -177,7 +177,7 @@ static bool setupTxSocket(bfdSessionInt *bfd)
     if ((++pcount) > (BFD_SRCPORTMAX - BFD_SRCPORTINIT)) {
       /* Searched all ports, none available */
       bfdLog(LOG_WARNING, "[%x] Can't find source port for peer %s:%d\n",
-             bfd->LocalDiscr, inet_ntoa(bfd->Sn.PeerAddr), bfd->Sn.PeerPort);
+             bfd->LocalDiscr, bfd->Sn.PeerAddrStr, bfd->Sn.PeerPort);
 
       close(sock);
 
@@ -192,7 +192,7 @@ static bool setupTxSocket(bfdSessionInt *bfd)
   bfd->TxSock = sock;
 
   bfdLog(LOG_DEBUG, "[%x] Opened socket %d to peer %s:%d\n",
-         bfd->LocalDiscr, sock, inet_ntoa(bfd->Sn.PeerAddr), bfd->Sn.PeerPort);
+         bfd->LocalDiscr, sock, bfd->Sn.PeerAddrStr, bfd->Sn.PeerPort);
 
   return true;
 }
@@ -219,7 +219,7 @@ bool bfdSocketClose(bfdSessionInt *bfd)
     close(bfd->TxSock);
 
     bfdLog(LOG_DEBUG, "[%x] Closed socket %d to peer %s:%d\n", bfd->LocalDiscr,
-           bfd->TxSock, inet_ntoa(bfd->Sn.PeerAddr), bfd->Sn.PeerPort);
+           bfd->TxSock, bfd->Sn.PeerAddrStr, bfd->Sn.PeerPort);
   }
 
   if (bfd->RxSock > 0 && bfd->TxSock != bfd->RxSock) {

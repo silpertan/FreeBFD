@@ -171,6 +171,8 @@ static int bfdMonitorProcessSessionId(json_object *jso, bfdSession *sn)
     if (inet_aton(str, &sn->PeerAddr) == 0) {
       bfdLog(LOG_ERR, "Failed to convert 'PeerIP' to IP address: %s\n", str);
       return -1;
+    } else {
+      strncpy(sn->PeerAddrStr, inet_ntoa(sn->PeerAddr), BFD_ADDR_STR_SZ);
     }
   } else {
     bfdLog(LOG_ERR, "Missing 'PeerIP' in json packet\n");
@@ -187,7 +189,8 @@ static int bfdMonitorProcessSessionId(json_object *jso, bfdSession *sn)
     if (inet_aton(str, &sn->LocalAddr) == 0) {
       bfdLog(LOG_WARNING, "Failed to convert 'LocalIP' to IP address: %s\n",
              str);
-
+    } else {
+      strncpy(sn->LocalAddrStr, inet_ntoa(sn->LocalAddr), BFD_ADDR_STR_SZ);
       /* TODO: Need to check if local addr is associated with an interface. */
     }
   } else {
@@ -207,8 +210,8 @@ static int bfdMonitorProcessSessionId(json_object *jso, bfdSession *sn)
   }
 
   bfdLog(LOG_INFO, "SessionID gathered:\n");
-  bfdLog(LOG_INFO, "  PeerIP is '%s'\n", inet_ntoa(sn->PeerAddr));
-  bfdLog(LOG_INFO, "  LocalIP is '%s'\n", inet_ntoa(sn->LocalAddr));
+  bfdLog(LOG_INFO, "  PeerIP is '%s'\n", sn->PeerAddrStr);
+  bfdLog(LOG_INFO, "  LocalIP is '%s'\n", sn->LocalAddrStr);
   bfdLog(LOG_INFO, "  PeerPort is '%d'\n", sn->PeerPort);
   bfdLog(LOG_INFO, "  LocalPort is '%d'\n", sn->LocalPort);
 
