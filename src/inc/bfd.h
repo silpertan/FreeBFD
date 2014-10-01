@@ -69,4 +69,6 @@ bool bfdDeleteSession(bfdSession *_bfd);
 void bfdToggleAdminDown(int sig);
 void bfdStartPollSequence(int sig);
 
+const char *bfdStateToStr(bfdState state);
+
 #endif /* _BFD_H_ */

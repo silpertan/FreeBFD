@@ -735,3 +735,17 @@ void bfdToggleAdminDown(int sig)
     }
   }
 }
+
+const char *bfdStateToStr(bfdState state)
+{
+  switch (state) {
+    case BFDSTATE_ADMINDOWN: return "AdminDown";
+    case BFDSTATE_DOWN:      return "Down";
+    case BFDSTATE_INIT:      return "Init";
+    case BFDSTATE_UP:        return "Up";
+
+    /* No default so compiler can complain if states are missing. */
+  };
+
+  return "Unknown";
+}
