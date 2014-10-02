@@ -66,7 +66,7 @@ Questions & Concerns
 Monitor Commands
 ++++++++++++++++
 
-These are sent from the monitor application to the **bfd** daemon.
+These are sent from the monitor application to the **bfdd** daemon.
 
 * Subscribe to session(s)::
 
@@ -101,7 +101,7 @@ These are sent from the monitor application to the **bfd** daemon.
 Monitor Notifications
 +++++++++++++++++++++
 
-These are sent from the **bfd** daemon to the monitor applications.
+These are sent from the **bfdd** daemon to the monitor applications.
 
 * Session State::
 
