@@ -266,8 +266,9 @@ static void bfdDetectTimeout(tpTimer *tim, void *arg)
 
   UNUSED(tim)
 
-  bfdLog(LOG_NOTICE, "[%x] Detect timeout with peer %s, state %d\n",
-         bfd->LocalDiscr, bfd->Sn.PeerAddrStr, bfd->SessionState);
+  bfdLog(LOG_NOTICE, "[%x] Detect timeout with peer %s, state [%d] %s\n",
+         bfd->LocalDiscr, bfd->Sn.PeerAddrStr, bfd->SessionState,
+         bfdStateToStr(bfd->SessionState));
 
   switch (bfd->SessionState) {
   case BFDSTATE_UP:
