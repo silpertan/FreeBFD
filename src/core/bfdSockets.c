@@ -243,6 +243,7 @@ bool bfdSocketClose(bfdSessionInt *bfd)
         }
 
         close(sockRec->sock);
+        tpRmSktActor(sockRec->sock);
 
         bfdLog(LOG_DEBUG, "[%x] Closed lonely Rx socket %d [*:%d]\n",
                bfd->LocalDiscr, sockRec->sock, bfd->Sn.LocalPort);
