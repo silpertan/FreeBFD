@@ -106,17 +106,56 @@ static void bfdMonitorDestroyNode(void *data, void *param)
   bfdMonitorDestroy(mon);
 }
 
+const char *NotifyJsonFmt = "{ "
+    "\"MsgType\":\"Notify\", "
+    "\"SessionID\": { "
+        "\"PeerAddr\":\"%s\", "
+        "\"LocalAddr\":\"%s\", "
+        "\"PeerPort\":%d, "
+        "\"LocalPort\":%d "
+    "}, "
+    "\"State\":\"%s\" "
+"}";
+
 /* Callback to be installed in session via bfdSubscribe() during
    subscribe operation. */
 static void bfdMonitorNotify(bfdState state, void *arg)
 {
+  char buf[512];
+  int len;
+  ssize_t n;
+  size_t bytes_pend;
+  size_t bytes_sent = 0;
   Monitor_t *mon = (Monitor_t *)arg;
 
-  // TODO: send out notification to connected monitor application.
-  bfdLog(LOG_DEBUG, "MONITOR[%d]: Sending notification: Peer=%s:%d "
-         "Local=%s:%d State=%s\n",
-         mon->sock, mon->Sn.PeerAddrStr, mon->Sn.PeerPort,
-         mon->Sn.LocalAddrStr, mon->Sn.LocalPort, bfdStateToStr(state));
+  len = snprintf(buf, sizeof(buf), NotifyJsonFmt, mon->Sn.PeerAddrStr,
+                 mon->Sn.LocalAddrStr, mon->Sn.PeerPort, mon->Sn.LocalPort,
+                 bfdStateToStr(state));
+  if (len < 0) {
+    bfdLog(LOG_ERR, "MONITOR[%d]: Failed to construct json notify string.",
+           mon->sock);
+    return;
+  }
+
+  bfdLog(LOG_DEBUG, "MONITOR[%d]: Sending notification %s\n", mon->sock, buf);
+
+  bytes_pend = (size_t)len;
+  while (bytes_sent < bytes_pend) {
+    n = send(mon->sock, buf+bytes_sent, bytes_pend, MSG_NOSIGNAL);
+    if (n < 0) {
+      if (errno == EINTR) { continue; }
+
+      bfdLog(LOG_ERR, "MONITOR[%d]: Error sending notification: %m\n",
+             mon->sock);
+      break;
+    }
+
+    bytes_sent += (size_t)n;
+    bytes_pend -= (size_t)n;
+  }
+
+  bfdLog(LOG_DEBUG, "MONITOR[%d]: Sent %zd of %d bytes of notification.\n",
+         mon->sock, bytes_sent, len);
 }
 
 static int bfdMonitorConnectionCompare(const void *v1, const void *v2,
