@@ -189,12 +189,14 @@ static void bfdMonitorConnectionClose(Connection_t *conn)
     avl_delete(connectionTree, conn);
 
     close(conn->sock);
-    tpRmSktActor(conn->sock);
-    bfdLog(LOG_INFO, "MONITOR[%d]: connection closed\n", conn->sock);
+    if (tpRmSktActor(conn->sock) < 0) {
+      bfdLog(LOG_ERR, "MONITOR[%d]: failed call to tpRmSktActor()\n", conn->sock);
+    }
 
     /* Remove all Monitors associated with this connection. */
     avl_destroy(conn->monitorTree, bfdMonitorDestroyNode);
 
+    bfdLog(LOG_INFO, "MONITOR[%d]: connection closed\n", conn->sock);
     free(conn);
   }
 }
