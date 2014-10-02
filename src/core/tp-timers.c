@@ -12,9 +12,11 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <stdlib.h>
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/time.h>
+#include "bfdLog.h"
 #include "avl.h"
 #define TP_PRIVATE
 #include "tp-timers.h"
@@ -413,7 +415,8 @@ void tpDoEventLoop(void)
      * some of the sockets have read data available.
      */
     memcpy(&rdset, &sktSet, sizeof(rdset));
-    if ((n = select(maxSkt, &rdset, NULL, NULL, nextTimer)) > 0) {
+    n = select(maxSkt, &rdset, NULL, NULL, nextTimer);
+    if (n > 0) {
       /* Some sockets have data, find which ones */
       for (i = 0; i < TP_MAXSKTS; ++i) {
         if (FD_ISSET(i, &rdset)) {
@@ -423,7 +426,21 @@ void tpDoEventLoop(void)
           if (--n <= 0) break;
         }
       }
+    } else if (n < 0) {
+      if (errno == EINTR) { continue; }
+
+      bfdLog(LOG_ERR, "Error in select(): %m\n");
+
+      /* FIXME: This is most likely not the desired behaviour in
+         production. Need to figure out which error are recoverable
+         and explicitly handle those instead of exiting. There may be
+         some cases where continuing after an error is fine, others,
+         not so much (e.g. those that indicate a bug in the code). In
+         any case, the log message above will help with investigation
+         of the problem. */
+      exit(1);
     }
+    /* N == 0 indicates timeout. */
   }
 }
 
