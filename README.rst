@@ -5,6 +5,8 @@
 This is an implementation of the BFD (Bidirectional Forwarding
 Detection) protocol.
 
+BFD is defined in `RFC5880 <http://tools.ietf.org/html/rfc5880>`_.
+
 It consists of two processes:
 
 **bfd**
