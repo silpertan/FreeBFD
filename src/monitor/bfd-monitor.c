@@ -273,7 +273,17 @@ typedef struct CmdEntry {
 
 static void handler_Subscribe(Connection_t *conn, json_object *jso)
 {
-  Monitor_t find[1] = {{ .sock = conn->sock }};
+  Monitor_t find[1] = {
+    {
+      .sock = conn->sock,
+      .Sn   = {
+        .DemandMode            = BFDDFLT_DEMANDMODE,
+        .DetectMult            = BFDDFLT_DETECTMULT,
+        .DesiredMinTxInterval  = BFDDFLT_DESIREDMINTX,
+        .RequiredMinRxInterval = BFDDFLT_REQUIREDMINRX
+      }
+    }
+  };
   Monitor_t *mon;
   bfdSubHndl sub;
 
