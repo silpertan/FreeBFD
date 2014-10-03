@@ -2,6 +2,7 @@
  * with IPv4 single-hop encapsulation, as described RFC 5880 and RFC 5881.
  */
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <signal.h>
@@ -155,7 +156,7 @@ void bfdRcvPkt(int s, void *arg)
 
   if (bfd->PollSeqInProgress && cp->f_final) {
     bfdLog(LOG_INFO, "[%x] Poll sequence concluded to peer %s\n",
-           bfd->LocalDiscr, bfd->Sn.PeerAddrStr);
+           bfd->LocalDiscr, bfd->Sn.SnIdStr);
     bfd->PollSeqInProgress = 0;
     bfd->Polling = 0;
     tpStopTimer(&(bfd->XmtTimer));
@@ -267,7 +268,7 @@ static void bfdDetectTimeout(tpTimer *tim, void *arg)
   UNUSED(tim)
 
   bfdLog(LOG_NOTICE, "[%x] Detect timeout with peer %s, state [%d] %s\n",
-         bfd->LocalDiscr, bfd->Sn.PeerAddrStr, bfd->SessionState,
+         bfd->LocalDiscr, bfd->Sn.SnIdStr, bfd->SessionState,
          bfdStateToStr(bfd->SessionState));
 
   switch (bfd->SessionState) {
@@ -305,8 +306,8 @@ static void bfdSessionDown(bfdSessionInt *bfd, uint8_t diag)
   bfd->PollSeqInProgress = 0;
   bfd->DemandModeActive = 0;
 
-  bfdLog(LOG_NOTICE, "[%x] Session DOWN to peer %s\n", bfd->LocalDiscr,
-         bfd->Sn.PeerAddrStr);
+  bfdLog(LOG_NOTICE, "[%x] Session DOWN to %s\n", bfd->LocalDiscr,
+         bfd->Sn.SnIdStr);
 
   bfdNotify(bfd);
 }
@@ -320,8 +321,8 @@ static void bfdSessionUp(bfdSessionInt *bfd)
   bfd->SendDesiredMinTx = bfd->Sn.DesiredMinTxInterval;
   bfd->Polling = 1;
 
-  bfdLog(LOG_NOTICE, "[%x] Session UP to peer %s\n", bfd->LocalDiscr,
-         bfd->Sn.PeerAddrStr);
+  bfdLog(LOG_NOTICE, "[%x] Session UP to %s\n", bfd->LocalDiscr,
+         bfd->Sn.SnIdStr);
 
   bfdNotify(bfd);
 }
@@ -443,8 +444,8 @@ bfdSubHndl bfdSubscribe(bfdSession *_bfd, bfdSubCB cb, void *arg)
   if ((bfd = bfdMatchSession(_bfd)) == NULL) {
     if ((bfd = bfdCreateSessionInt(_bfd)) == NULL) { return NULL; }
   } else {
-    bfdLog(LOG_NOTICE, "[%x] Adding notifier to session with peer %s:%d\n",
-           bfd->LocalDiscr, bfd->Sn.PeerAddrStr, bfd->Sn.PeerPort);
+    bfdLog(LOG_NOTICE, "[%x] Adding notifier to session with %s\n",
+           bfd->LocalDiscr, bfd->Sn.SnIdStr);
   }
 
   /* add the notification object to the session */
@@ -503,9 +504,7 @@ void bfdUnsubscribe(bfdSubHndl hndl)
     }
   }
 
-  bfdLog(LOG_DEBUG, "[%x] bfdUnsubscribe: peer=%s:%d local=%s:%d\n",
-         bfd->LocalDiscr, bfd->Sn.PeerAddrStr, bfd->Sn.PeerPort,
-         bfd->Sn.LocalAddrStr, bfd->Sn.LocalPort);
+  bfdLog(LOG_DEBUG, "[%x] bfdUnsubscribe: %s\n", bfd->LocalDiscr, bfd->Sn.SnIdStr);
 
   free(notify);
 
@@ -559,9 +558,8 @@ static bfdSessionInt *bfdCreateSessionInt(bfdSession *_bfd)
   peerHash[hkey] = bfd;
   /* Start transmitting control packets */
   bfdXmtTimeout(&(bfd->XmtTimer), bfd);
-  bfdLog(LOG_NOTICE, "[%x] Created new session with peer=%s:%d, local=%s:%d\n",
-         bfd->LocalDiscr, bfd->Sn.PeerAddrStr, bfd->Sn.PeerPort,
-         bfd->Sn.LocalAddrStr, bfd->Sn.LocalPort);
+  bfdLog(LOG_NOTICE, "[%x] Created new session with %s\n",
+         bfd->LocalDiscr, bfd->Sn.SnIdStr);
 
   return bfd;
 }
@@ -626,9 +624,8 @@ void bfdRmSession(bfdSessionInt *bfd)
 {
   uint32_t hkey;
 
-  bfdLog(LOG_DEBUG, "[%x] Removing session with peer=%s:%d, local=%s:%d\n",
-         bfd->LocalDiscr, bfd->Sn.PeerAddrStr, bfd->Sn.PeerPort,
-         bfd->Sn.LocalAddrStr, bfd->Sn.LocalPort);
+  bfdLog(LOG_DEBUG, "[%x] Removing session with %s\n",
+         bfd->LocalDiscr, bfd->Sn.SnIdStr);
 
   bfdSocketClose(bfd);
 
@@ -693,9 +690,8 @@ void bfdStartPollSequence(int sig)
                      bfd->DetectTime,
                      bfdDetectTimeout,
                      bfd);
-      bfdLog(LOG_INFO, "[%x] Poll sequence started to peer %s:%d, timer %d\n",
-             bfd->LocalDiscr, bfd->Sn.PeerAddrStr, bfd->Sn.PeerPort,
-             bfd->DetectTime);
+      bfdLog(LOG_INFO, "[%x] Poll sequence started to %s, timer %d\n",
+             bfd->LocalDiscr, bfd->Sn.SnIdStr, bfd->DetectTime);
     }
   }
 }
@@ -715,8 +711,8 @@ void bfdToggleAdminDown(int sig)
       /* Session is already ADMINDOWN, enable it */
       bfd->SessionState = BFDSTATE_DOWN;
       bfdXmtTimeout(&(bfd->XmtTimer), bfd);
-      bfdLog(LOG_NOTICE, "[%x] Session to peer %s:%d enabled\n",
-             bfd->LocalDiscr, bfd->Sn.PeerAddrStr, bfd->Sn.PeerPort);
+      bfdLog(LOG_NOTICE, "[%x] Session to %s enabled\n",
+             bfd->LocalDiscr, bfd->Sn.SnIdStr);
       bfdNotify(bfd);
     } else {
       uint32_t selectedMin;
@@ -735,8 +731,8 @@ void bfdToggleAdminDown(int sig)
       bfd->ActiveDesiredMinTx = selectedMin;
       tpStopTimer(&(bfd->XmtTimer));
       tpStopTimer(&(bfd->DetectTimer));
-      bfdLog(LOG_NOTICE, "[%x] Session to peer %s:%d disabled\n",
-             bfd->LocalDiscr, bfd->Sn.PeerAddrStr, bfd->Sn.PeerPort);
+      bfdLog(LOG_NOTICE, "[%x] Session to %s disabled\n",
+             bfd->LocalDiscr, bfd->Sn.SnIdStr);
       bfdNotify(bfd);
     }
   }
@@ -754,4 +750,21 @@ const char *bfdStateToStr(bfdState state)
   };
 
   return "Unknown";
+}
+
+/*
+ * Must be called immediately after the PeerAddr, LocalAddr, PeerPort
+ * and LocalPort fields have been set.
+ */
+void bfdSessionSetStrings(bfdSession *bfd)
+{
+    snprintf(bfd->PeerAddrStr, BFD_ADDR_STR_SZ, "%s", inet_ntoa(bfd->PeerAddr));
+    snprintf(bfd->LocalAddrStr, BFD_ADDR_STR_SZ, "%s", inet_ntoa(bfd->LocalAddr));
+
+    /* Can not call inet_ntoa() twice in arguments to a function since
+       it uses a static internal buffer and always return the same
+       pointer (i.e. the second overwrites the buffer). */
+
+    snprintf(bfd->SnIdStr, BFD_SN_ID_STR_SZ, "peer=%s:%d local=%s:%d",
+             bfd->PeerAddrStr, bfd->PeerPort, bfd->LocalAddrStr, bfd->LocalPort);
 }

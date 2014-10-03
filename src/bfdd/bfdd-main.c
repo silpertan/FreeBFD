@@ -272,11 +272,10 @@ int main(int argc, char **argv)
       bfd.PeerPort              = (uint16_t)peerPort;
       bfd.LocalPort             = (uint16_t)localport;
 
-      strncpy(bfd.PeerAddrStr, inet_ntoa(peeraddr), BFD_ADDR_STR_SZ);
-      strncpy(bfd.LocalAddrStr, inet_ntoa(localaddr), BFD_ADDR_STR_SZ);
+      bfdSessionSetStrings(&bfd);
 
       bfdLog(LOG_INFO, "Creating session %d with %s (%s)\n", i, connectaddr,
-             bfd.PeerAddrStr);
+             bfd.SnIdStr);
 
       if (!bfdCreateSession(&bfd)) {
         bfdLog(LOG_ERR, "Can't create session %d: %m\n", i);

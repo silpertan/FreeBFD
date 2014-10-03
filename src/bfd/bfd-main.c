@@ -199,12 +199,11 @@ int main(int argc, char **argv)
   bfd.PeerPort              = peerPort;
   bfd.LocalPort             = localPort;
 
-  strncpy(bfd.PeerAddrStr, inet_ntoa(peeraddr), BFD_ADDR_STR_SZ);
-  strncpy(bfd.LocalAddrStr, inet_ntoa(localaddr), BFD_ADDR_STR_SZ);
+  bfdSessionSetStrings(&bfd);
 
   /* Make the initial session */
   bfdLog(LOG_INFO, "Creating initial session with %s (%s)\n", connectaddr,
-         bfd.PeerAddrStr);
+         bfd.SnIdStr);
 
   if (!bfdCreateSession(&bfd)) {
     bfdLog(LOG_ERR, "Can't creating initial session: %m\n");

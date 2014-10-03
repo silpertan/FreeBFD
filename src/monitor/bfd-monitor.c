@@ -90,9 +90,8 @@ static Monitor_t *bfdMonitorCreateCopy(Monitor_t *other)
 static void bfdMonitorDestroy(Monitor_t *mon)
 {
   if (mon) {
-    bfdLog(LOG_DEBUG, "MONITOR[%d]: destroying monitor: Peer=%s:%d, "
-           "Local=%s:%d\n", mon->sock, mon->Sn.PeerAddrStr, mon->Sn.PeerPort,
-           mon->Sn.LocalAddrStr, mon->Sn.LocalPort);
+    bfdLog(LOG_DEBUG, "MONITOR[%d]: destroying monitor: %s\n",
+           mon->sock, mon->Sn.SnIdStr);
 
     free(mon);
   }
@@ -223,8 +222,6 @@ static int bfdMonitorProcessSessionId(json_object *jso, bfdSession *sn)
     if (inet_aton(str, &sn->PeerAddr) == 0) {
       bfdLog(LOG_ERR, "Failed to convert 'PeerAddr' to IP address: %s\n", str);
       return -1;
-    } else {
-      strncpy(sn->PeerAddrStr, inet_ntoa(sn->PeerAddr), BFD_ADDR_STR_SZ);
     }
   } else {
     bfdLog(LOG_ERR, "Missing 'PeerAddr' in json packet\n");
@@ -242,7 +239,6 @@ static int bfdMonitorProcessSessionId(json_object *jso, bfdSession *sn)
       bfdLog(LOG_WARNING, "Failed to convert 'LocalAddr' to IP address: %s\n",
              str);
     } else {
-      strncpy(sn->LocalAddrStr, inet_ntoa(sn->LocalAddr), BFD_ADDR_STR_SZ);
       /* TODO: Need to check if local addr is associated with an interface. */
     }
   } else {
@@ -261,11 +257,9 @@ static int bfdMonitorProcessSessionId(json_object *jso, bfdSession *sn)
     sn->LocalPort = (uint16_t)(json_object_get_int(item) & 0xffff);
   }
 
-  bfdLog(LOG_INFO, "SessionID gathered:\n");
-  bfdLog(LOG_INFO, "  PeerAddr is '%s'\n", sn->PeerAddrStr);
-  bfdLog(LOG_INFO, "  LocalAddr is '%s'\n", sn->LocalAddrStr);
-  bfdLog(LOG_INFO, "  PeerPort is '%d'\n", sn->PeerPort);
-  bfdLog(LOG_INFO, "  LocalPort is '%d'\n", sn->LocalPort);
+  bfdSessionSetStrings(sn);
+
+  bfdLog(LOG_INFO, "SessionID gathered: %s\n", sn->SnIdStr);
 
   return 0;
 }

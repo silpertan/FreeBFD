@@ -16,6 +16,7 @@
 #define BFDDFLT_UDPPORT         ((uint16_t)3784)
 
 #define BFD_ADDR_STR_SZ 20
+#define BFD_SN_ID_STR_SZ 60
 
 typedef enum {
   BFDSTATE_ADMINDOWN = 0,
@@ -51,6 +52,7 @@ typedef struct {
   /* Convenience variables to avoid issues with inet_ntoa(). */
   char PeerAddrStr[BFD_ADDR_STR_SZ];
   char LocalAddrStr[BFD_ADDR_STR_SZ];
+  char SnIdStr[BFD_SN_ID_STR_SZ];
 
   /* Session Parameters */
   bool     DemandMode;
@@ -70,5 +72,6 @@ void bfdToggleAdminDown(int sig);
 void bfdStartPollSequence(int sig);
 
 const char *bfdStateToStr(bfdState state);
+void bfdSessionSetStrings(bfdSession *bfd);
 
 #endif /* _BFD_H_ */
