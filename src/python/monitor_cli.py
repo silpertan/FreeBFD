@@ -9,6 +9,8 @@ import socket
 import select
 import json
 import cmd
+import optparse
+import shlex
 
 CTRL_ADDR = ('localhost', 5643)
 
@@ -55,7 +57,7 @@ class SessionID(object):
 
 
 class MonitorMsg(object):
-    def __init__(self, msgtype, sess_id):
+    def __init__(self, msgtype, sess_id, sess_opts):
         self.msg = {
             'MsgType': msgtype,
             'SessionID' : {
@@ -72,13 +74,39 @@ class MonitorMsg(object):
         if sess_id.localPort is not None:
             self.msg['SessionID']['LocalPort'] = sess_id.LocalPort()
 
+        if sess_opts:
+            self.msg['SessionOpts'] = sess_opts
+
     def to_json(self):
         return json.dumps(self.msg)
 
+class SubscribeOptParser(optparse.OptionParser):
+    def __init__(self):
+        optparse.OptionParser.__init__(self, add_help_option=False)
+        self.add_option('-o', '--option', action='append')
+
+    def error(self, msg):
+        self.exit(msg=msg)
+
+    def exit(self, status=0, msg=None):
+        '''Replace parser exit() method so that it does not exit on errors.
+        '''
+        if msg:
+            sys.stderr.write('%s\n' % msg)
+
 class Commander(cmd.Cmd):
+    SubscribeOpts = [
+        'DemandMode',
+        'DetectMult',
+        'DesiredMinTxInterval',
+        'RequiredMinRxInterval',
+    ]
+
     def __init__(self, sock):
         cmd.Cmd.__init__(self, stdout=sys.stdout)
         self.sock = sock
+
+        self.subscribe_parser = SubscribeOptParser()
 
     def do_quit(self, line):
         '''Quit the monitor.
@@ -95,11 +123,34 @@ class Commander(cmd.Cmd):
     def do_subscribe(self, line):
         '''Subscribe to a session.
 
-        Argument can be '<peer-addr>[:<peer-port>] [<local-addr>[:<local-port>]]'.
+        Argument can be '<peer-addr>[:<peer-port>] [<local-addr>[:<local-port>]] [-o <key>:<value>]'.
+
+        Multiple options (-o) can be given. Valid keys follow (all are ints):
+            * DemandMode
+            * DetectMult
+            * DesiredMinTxInterval
+            * RequiredMinRxInterval
         '''
-        argv = line.split()
-        if argv:
-            msg = MonitorMsg('Subscribe', SessionID(*argv))
+        argv = shlex.split(line)
+        opts,args = self.subscribe_parser.parse_args(argv)
+        print argv, opts, args
+        if args:
+            sess_opts = {}
+            for o in opts.option:
+                kv = o.split(':')
+                if len(kv) == 2:
+                    k,v = kv
+                    if k in self.SubscribeOpts:
+                        try:
+                            sess_opts[k] = int(v)
+                        except ValueError as e:
+                            sys.stderr.write('Failed to convert option to int: %s\n' % str(e))
+                    else:
+                        sys.stderr.write('Unknown option: %s\n' % (k))
+                else:
+                    sys.stderr.write('Badly formatted option: %s\n' % (kv))
+
+            msg = MonitorMsg('Subscribe', SessionID(*args), sess_opts)
             self.sock.sendall(msg.to_json())
         else:
             sys.stderr.write("Missing required arguments.\n")
@@ -109,7 +160,7 @@ class Commander(cmd.Cmd):
 
         Argument can be '<peer-ip>[:<peer-port>] [<local-ip>[:<local-port>]]'.
         '''
-        argv = line.split()
+        argv = shlex.split(line)
         if argv:
             msg = MonitorMsg('Unsubscribe', SessionID(*argv))
             self.sock.sendall(msg.to_json())
