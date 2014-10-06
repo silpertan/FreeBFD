@@ -78,7 +78,8 @@ static Monitor_t *bfdMonitorCreateCopy(Monitor_t *other)
 {
   Monitor_t *mon = (Monitor_t *)calloc(sizeof(Monitor_t), 1);
   if (!mon) {
-    bfdLog(LOG_ERR, "Failed to malloc() a Monitor.\n");
+    bfdLog(LOG_ERR, "MONITOR[%d]: Failed to malloc() a Monitor.\n",
+           other->sock);
     exit(1);
   }
 
@@ -170,7 +171,8 @@ static Connection_t *bfdMonitorConnectionCreate(int sock)
 {
   Connection_t *conn = (Connection_t *)calloc(sizeof(Connection_t), 1);
   if (!conn) {
-    bfdLog(LOG_ERR, "Failed to malloc() a Connection.\n");
+    bfdLog(LOG_ERR, "MONITOR[%d]: Failed to malloc() a Connection.\n",
+           sock);
     exit(1);
   }
 
@@ -211,7 +213,7 @@ static int bfdMonitorProcessJsonSessionId(json_object *jso, bfdSession *sn)
 
   json_object_object_get_ex(jso, "SessionID", &sid_jso);
   if (!sid_jso) {
-    bfdLog(LOG_ERR, "Missing 'SessionID' in json packet\n");
+    bfdLog(LOG_ERR, "MONITOR: Missing 'SessionID' in json packet\n");
     return -1;
   }
 
@@ -220,11 +222,12 @@ static int bfdMonitorProcessJsonSessionId(json_object *jso, bfdSession *sn)
   if (item) {
     str = json_object_get_string(item);
     if (inet_aton(str, &sn->PeerAddr) == 0) {
-      bfdLog(LOG_ERR, "Failed to convert 'PeerAddr' to IP address: %s\n", str);
+      bfdLog(LOG_ERR, "MONITOR: Failed to convert 'PeerAddr' to IP address: %s\n",
+             str);
       return -1;
     }
   } else {
-    bfdLog(LOG_ERR, "Missing 'PeerAddr' in json packet\n");
+    bfdLog(LOG_ERR, "MONITOR: Missing 'PeerAddr' in json packet\n");
     return -1;
   }
 
@@ -236,13 +239,13 @@ static int bfdMonitorProcessJsonSessionId(json_object *jso, bfdSession *sn)
   if (item) {
     str = json_object_get_string(item);
     if (inet_aton(str, &sn->LocalAddr) == 0) {
-      bfdLog(LOG_WARNING, "Failed to convert 'LocalAddr' to IP address: %s\n",
-             str);
+      bfdLog(LOG_WARNING, "MONITOR: Failed to convert 'LocalAddr' to IP "
+             "address: %s\n", str);
     } else {
       /* TODO: Need to check if local addr is associated with an interface. */
     }
   } else {
-    bfdLog(LOG_INFO, "Missing optional 'LocalAddr' in json packet\n");
+    bfdLog(LOG_INFO, "MONITOR: Missing optional 'LocalAddr' in json packet\n");
   }
 
   sn->PeerPort = 0;
@@ -259,7 +262,7 @@ static int bfdMonitorProcessJsonSessionId(json_object *jso, bfdSession *sn)
 
   bfdSessionSetStrings(sn);
 
-  bfdLog(LOG_INFO, "SessionID gathered: %s\n", sn->SnIdStr);
+  bfdLog(LOG_INFO, "MONITOR: SessionID gathered: %s\n", sn->SnIdStr);
 
   return 0;
 }
@@ -287,10 +290,11 @@ static void handler_Subscribe(Connection_t *conn, json_object *jso)
   Monitor_t *mon;
   bfdSubHndl sub;
 
-  bfdLog(LOG_INFO, "Processing 'Subscribe' command\n");
+  bfdLog(LOG_INFO, "MONITOR[%d] Processing 'Subscribe' command\n", conn->sock);
 
   if (bfdMonitorProcessJsonSessionId(jso, &find->Sn) < 0) {
-    bfdLog(LOG_WARNING, "MONITOR: unable to extract session id from json.\n");
+    bfdLog(LOG_WARNING, "MONITOR[%d]: unable to extract session id from json.\n",
+           conn->sock);
     return;
   }
 
@@ -420,7 +424,7 @@ static void bfdMonitorConnection(int server, void *arg)
   Connection_t *conn;
 
   if ((sock = accept(server, (struct sockaddr *)NULL, NULL)) < 0) {
-    bfdLog(LOG_ERR, "MONITOR: Failed call to accept(): %m\n");
+    bfdLog(LOG_ERR, "MONITOR[%d]: Failed call to accept(): %m\n", server);
     return;
   }
 
@@ -448,7 +452,7 @@ void bfdMonitorSetupServer(uint16_t port)
   }
 
   if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0) {
-    bfdLog(LOG_ERR, "MONITOR: Can't set socket option REUSEADDR: %m\n");
+    bfdLog(LOG_ERR, "MONITOR[%d]: Can't set socket option REUSEADDR: %m\n", sock);
     exit(1);
   }
 
@@ -457,16 +461,16 @@ void bfdMonitorSetupServer(uint16_t port)
   sin.sin_port        = htons(port);
 
   if (bind(sock, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
-    bfdLog(LOG_ERR, "MONITOR: Can't bind socket to port %d: %m\n", port);
+    bfdLog(LOG_ERR, "MONITOR[%d]: Can't bind socket to port %d: %m\n", sock, port);
     exit(1);
   }
 
   if (listen(sock, 5) < 0) {
-    bfdLog(LOG_ERR, "MONITOR: Can't listen on socket: %m\n");
+    bfdLog(LOG_ERR, "MONITOR[%d]: Can't listen on socket: %m\n", sock);
     exit(1);
   }
 
-  bfdLog(LOG_INFO, "MONITOR: Waiting for connections\n");
+  bfdLog(LOG_INFO, "MONITOR[%d]: Waiting for connections\n", sock);
 
   /* Add socket to select poll. */
   tpSetSktActor(sock, bfdMonitorConnection, NULL, NULL);
