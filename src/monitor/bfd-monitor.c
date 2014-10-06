@@ -203,7 +203,7 @@ static void bfdMonitorConnectionClose(Connection_t *conn)
 /*
  * Returns 0 on success, -1 on failure to extract session id from json.
  */
-static int bfdMonitorProcessSessionId(json_object *jso, bfdSession *sn)
+static int bfdMonitorProcessJsonSessionId(json_object *jso, bfdSession *sn)
 {
   json_object *sid_jso;
   json_object *item;
@@ -289,7 +289,7 @@ static void handler_Subscribe(Connection_t *conn, json_object *jso)
 
   bfdLog(LOG_INFO, "Processing 'Subscribe' command\n");
 
-  if (bfdMonitorProcessSessionId(jso, &find->Sn) < 0) {
+  if (bfdMonitorProcessJsonSessionId(jso, &find->Sn) < 0) {
     bfdLog(LOG_WARNING, "MONITOR: unable to extract session id from json.\n");
     return;
   }
@@ -321,7 +321,7 @@ static void handler_Unsubscribe(Connection_t *conn, json_object *jso)
 
   bfdLog(LOG_INFO, "MONITOR[%d] Processing 'Unsubscribe' command\n", conn->sock);
 
-  if (bfdMonitorProcessSessionId(jso, &find->Sn) < 0) {
+  if (bfdMonitorProcessJsonSessionId(jso, &find->Sn) < 0) {
     bfdLog(LOG_WARNING, "MONITOR[%d]: unable to extract session id from json.\n",
            conn->sock);
     return;
