@@ -9,7 +9,7 @@
 #include <netinet/ip.h>
 
 /* Program defaults */
-#define BFDDFLT_DEMANDMODE      ((uint8_t)0)
+#define BFDDFLT_DEMANDMODE      false
 #define BFDDFLT_DETECTMULT      ((uint8_t)2)
 #define BFDDFLT_DESIREDMINTX    100000
 #define BFDDFLT_REQUIREDMINRX   50000

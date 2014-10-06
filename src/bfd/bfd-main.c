@@ -8,6 +8,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <inttypes.h>
+#include <stdbool.h>
 #include "bfd.h"
 #include "bfdLog.h"
 #include "bfdExtensions.h"
@@ -16,7 +17,7 @@
 /*
  * Session defaults
  */
-static uint8_t  defDemandModeDesired = BFDDFLT_DEMANDMODE;
+static bool     defDemandModeDesired = BFDDFLT_DEMANDMODE;
 static uint8_t  defDetectMult        = BFDDFLT_DETECTMULT;
 static uint32_t defDesiredMinTx      = BFDDFLT_DESIREDMINTX;
 static uint32_t defRequiredMinRx     = BFDDFLT_REQUIREDMINRX;
