@@ -262,9 +262,51 @@ static int bfdMonitorProcessJsonSessionId(json_object *jso, bfdSession *sn)
 
   bfdSessionSetStrings(sn);
 
-  bfdLog(LOG_INFO, "MONITOR: SessionID gathered: %s\n", sn->SnIdStr);
+  bfdLog(LOG_INFO, "MONITOR: SessionID from json msg: %s\n", sn->SnIdStr);
 
   return 0;
+}
+
+static void bfdMonitorProcessJsonSessionOpts(json_object *jso, bfdSession *sn)
+{
+  json_object *opts_jso;
+  json_object *item;
+  const char *str;
+
+  json_object_object_get_ex(jso, "SessionOpts", &opts_jso);
+  if (!opts_jso) {
+    bfdLog(LOG_DEBUG, "MONITOR: No optional 'SessionOpts' in json packet\n");
+    return;
+  }
+
+  json_object_object_get_ex(opts_jso, "DemandMode", &item);
+  if (item) {
+    str = json_object_get_string(item);
+    sn->DemandMode = (strcasecmp("on", str) == 0) ? true : false;
+  }
+
+  json_object_object_get_ex(opts_jso, "DetectMult", &item);
+  if (item) {
+    sn->DetectMult = (uint8_t)(json_object_get_int(item) & 0xff);
+  }
+
+  json_object_object_get_ex(opts_jso, "DesiredMinTxInterval", &item);
+  if (item) {
+    sn->DesiredMinTxInterval = (uint32_t)json_object_get_int(item);
+  }
+
+  json_object_object_get_ex(opts_jso, "RequiredMinRxInterval", &item);
+  if (item) {
+    sn->RequiredMinRxInterval = (uint32_t)json_object_get_int(item);
+  }
+
+  bfdLog(LOG_DEBUG, "MONITOR: SessionOpts from json msg:\n"
+         "  DemandMode:            %s\n"
+         "  DetectMult:            %d\n"
+         "  DesiredMinTxInterval:  %d\n"
+         "  RequiredMinRxInterval: %d\n",
+         sn->DemandMode ? "on" : "off", sn->DetectMult,
+         sn->DesiredMinTxInterval, sn->RequiredMinRxInterval);
 }
 
 typedef void (*CmdHandler_t)(Connection_t *conn, json_object *jso);
@@ -297,6 +339,8 @@ static void handler_Subscribe(Connection_t *conn, json_object *jso)
            conn->sock);
     return;
   }
+
+  bfdMonitorProcessJsonSessionOpts(jso, &find->Sn);
 
   // Look for an existing subscription on this connection.
   mon = avl_find(conn->monitorTree, find);
