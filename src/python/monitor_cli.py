@@ -57,7 +57,7 @@ class SessionID(object):
 
 
 class MonitorMsg(object):
-    def __init__(self, msgtype, sess_id, sess_opts):
+    def __init__(self, msgtype, sess_id, sess_opts=None):
         self.msg = {
             'MsgType': msgtype,
             'SessionID' : {
@@ -95,12 +95,12 @@ class SubscribeOptParser(optparse.OptionParser):
             sys.stderr.write('%s\n' % msg)
 
 class Commander(cmd.Cmd):
-    SubscribeOpts = [
-        'DemandMode',
-        'DetectMult',
-        'DesiredMinTxInterval',
-        'RequiredMinRxInterval',
-    ]
+    SubscribeOpts = {
+        'DemandMode': str,
+        'DetectMult': int,
+        'DesiredMinTxInterval': int,
+        'RequiredMinRxInterval': int,
+    }
 
     def __init__(self, sock):
         cmd.Cmd.__init__(self, stdout=sys.stdout)
@@ -123,35 +123,43 @@ class Commander(cmd.Cmd):
     def do_subscribe(self, line):
         '''Subscribe to a session.
 
-        Argument can be '<peer-addr>[:<peer-port>] [<local-addr>[:<local-port>]] [-o <key>:<value>]'.
+        Argument can be:
+          '<peer-addr>[:<peer-port>] [<local-addr>[:<local-port>]] [-o <key>=<val>]'
 
-        Multiple options (-o) can be given. Valid keys follow (all are ints):
-            * DemandMode
-            * DetectMult
-            * DesiredMinTxInterval
-            * RequiredMinRxInterval
+        Multiple options (-o) can be given. Valid keys follow:
+            * DemandMode=on|off
+            * DetectMult=<int>
+            * DesiredMinTxInterval=<int>
+            * RequiredMinRxInterval=<int>
         '''
         argv = shlex.split(line)
         opts,args = self.subscribe_parser.parse_args(argv)
-        print argv, opts, args
         if args:
+            errs = 0
             sess_opts = {}
             for o in opts.option:
-                kv = o.split(':')
-                if len(kv) == 2:
-                    k,v = kv
-                    if k in self.SubscribeOpts:
-                        try:
-                            sess_opts[k] = int(v)
-                        except ValueError as e:
-                            sys.stderr.write('Failed to convert option to int: %s\n' % str(e))
-                    else:
-                        sys.stderr.write('Unknown option: %s\n' % (k))
-                else:
-                    sys.stderr.write('Badly formatted option: %s\n' % (kv))
+                kv = o.split('=', 1)
+                if len(kv) != 2:
+                    sys.stderr.write('Badly formatted option: %s\n' % (o))
+                    errs += 1
+                    continue
 
-            msg = MonitorMsg('Subscribe', SessionID(*args), sess_opts)
-            self.sock.sendall(msg.to_json())
+                k,v = kv
+                if k not in self.SubscribeOpts:
+                    sys.stderr.write('Unknown option: %s\n' % (k))
+                    errs += 1
+                    continue
+
+                conversion = self.SubscribeOpts[k]
+                try:
+                    sess_opts[k] = conversion(v)
+                except ValueError as e:
+                    sys.stderr.write('Failed to convert option: %s\n' % str(e))
+                    errs += 1
+
+            if not errs:
+                msg = MonitorMsg('Subscribe', SessionID(*args), sess_opts)
+                self.sock.sendall(msg.to_json())
         else:
             sys.stderr.write("Missing required arguments.\n")
 
