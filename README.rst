@@ -82,6 +82,7 @@ These are sent from the monitor application to the **bfdd** daemon.
         "SessionOpts" : {
             "DemandMode" : "on|off",
             "DetectMult" : <int>,
+            "AuthType" : <int>,        // TODO: No implemented yet
             "RequiredMinRxInterval" : <int>,
             "DesiredMinTxInterval" : <int>,
         }

@@ -290,6 +290,14 @@ static void bfdMonitorProcessJsonSessionOpts(json_object *jso, bfdSession *sn)
     sn->DetectMult = (uint8_t)(json_object_get_int(item) & 0xff);
   }
 
+#if 0
+  // TODO: Not used yet.
+  json_object_object_get_ex(opts_jso, "AuthType", &item);
+  if (item) {
+    sn->AuthType = (uint8_t)(json_object_get_int(item) & 0xff);
+  }
+#endif
+
   json_object_object_get_ex(opts_jso, "DesiredMinTxInterval", &item);
   if (item) {
     sn->DesiredMinTxInterval = (uint32_t)json_object_get_int(item);
@@ -303,9 +311,10 @@ static void bfdMonitorProcessJsonSessionOpts(json_object *jso, bfdSession *sn)
   bfdLog(LOG_DEBUG, "MONITOR: SessionOpts from json msg:\n"
          "  DemandMode:            %s\n"
          "  DetectMult:            %d\n"
+         /*"  AuthType:              %d\n"*/
          "  DesiredMinTxInterval:  %d\n"
          "  RequiredMinRxInterval: %d\n",
-         sn->DemandMode ? "on" : "off", sn->DetectMult,
+         sn->DemandMode ? "on" : "off", sn->DetectMult, /*sn->AuthType,*/
          sn->DesiredMinTxInterval, sn->RequiredMinRxInterval);
 }
 
