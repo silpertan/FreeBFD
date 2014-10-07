@@ -83,7 +83,7 @@ class MonitorMsg(object):
 class SubscribeOptParser(optparse.OptionParser):
     def __init__(self):
         optparse.OptionParser.__init__(self, add_help_option=False)
-        self.add_option('-o', '--option', action='append')
+        self.add_option('-o', '--option', action='append', default=[])
 
     def error(self, msg):
         self.exit(msg=msg)
