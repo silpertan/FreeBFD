@@ -7,18 +7,23 @@ AVL_TARFILE = src/core/avl-1.4.0.tar.gz
 AVL_DIR = $(OUTDIR)/avl-1.4.0
 
 CC = cc
+RANLIB = ranlib
 
 GEN_CFLAGS = -g -Wall -Wconversion -Werror
 GEN_CFLAGS += $(shell pkg-config --cflags json-c)
 
 INC = -Isrc/inc -I$(AVL_DIR)
 override CFLAGS := $(GEN_CFLAGS) $(INC) $(CFLAGS)
-CC_LINK = $(CC)
+CC_LINK = $(CC) -L$(OUTDIR)
 
 LIBS = -L$(AVL_DIR) -lavl
 LIBS += $(shell pkg-config --libs json-c)
 
-EXE_FILES = $(OUTDIR)/bfd $(OUTDIR)/bfdd
+EXE_FILES  = $(OUTDIR)/bfd
+EXE_FILES += $(OUTDIR)/bfdd
+EXE_FILES += $(OUTDIR)/bfdmontest
+
+LIB_FILES  = $(OUTDIR)/libbfdmon.a
 
 TARFILE = bfd.tar.gz
 
@@ -36,6 +41,8 @@ SRCDIRS := core
 SRCDIRS += monitor
 SRCDIRS += bfd
 SRCDIRS += bfdd
+SRCDIRS += libbfdmon
+SRCDIRS += bfdmontest
 
 define do_include
   SRCS :=
@@ -74,6 +81,16 @@ $(OUTDIR)/bfd: $(core_OBJS) $(bfd_OBJS)
 $(OUTDIR)/bfdd: $(core_OBJS) $(monitor_OBJS) $(bfdd_OBJS)
 	@echo "LINK $@"
 	$(Q)$(CC_LINK) -o $@ $^ $(LIBS) -lconfig
+
+$(OUTDIR)/libbfdmon.a: $(libbfdmon_OBJS)
+	@rm -rf $@
+	@echo AR $@
+	$(Q)$(AR) cru $@ $(libbfdmon_OBJS)
+	$(Q)$(RANLIB) $@
+
+$(OUTDIR)/bfdmontest: $(bfdmontest_OBJS) $(OUTDIR)/libbfdmon.a
+	@echo "LINK $@"
+	$(Q)$(CC_LINK) -o $@ $(bfdmontest_OBJS) -lbfdmon
 
 clean:
 	rm -f $(OUTDIR)/*.o $(EXE_FILES)
