@@ -12,6 +12,7 @@ import cmd
 import optparse
 import shlex
 import threading
+import time
 
 CTRL_ADDR = ('localhost', 5643)
 
@@ -120,7 +121,7 @@ class Commander(cmd.Cmd):
         try:
             self.sock.sendall(data)
         except socket.error as err:
-            print err
+            sys.stderr.write('%s\n' % str(err))
 
     def do_quit(self, line):
         '''Quit the monitor.
@@ -200,14 +201,14 @@ class SocketReader(threading.Thread):
         }
 
     def stop(self):
-        print 'Stopping SocketReader'
+        sys.stderr.write('Stopping SocketReader\n')
         self.isRunning = False
         self.join(5)
         if self.isAlive():
             raise Exception('Failed to stop SocketReader thread.')
 
     def run(self):
-        print 'Starting SocketReader'
+        sys.stderr.write('Starting SocketReader\n')
 
         try:
             poller = select.poll()
@@ -223,12 +224,12 @@ class SocketReader(threading.Thread):
                         if s is self.sock:
                             data = self.sock.recv(256)
                             if not data:
-                                print 'Monitor server closed connection.\n'
+                                sys.stderr.write('Monitor server closed connection.\n')
                                 self.isRunning = False
                                 break
-                            print 'RECV:', data.strip()
+                            sys.stderr.write('RECV: %s\n' % data.strip())
         finally:
-            print 'closing socket\n'
+            sys.stderr.write('closing socket\n')
             self.sock.close()
 
 
@@ -257,6 +258,7 @@ def main():
     th.start()
 
     try:
+        time.sleep(0.2)
         cmdr = Commander(sock)
         cmdr.cmdloop(INTRO)
     finally:
