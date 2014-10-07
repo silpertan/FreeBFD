@@ -94,4 +94,7 @@ def main():
                     s.send(msg)
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
