@@ -111,6 +111,11 @@ class Commander(cmd.Cmd):
         self.prompt = '[%04d] >>> ' % self.cmd_cnt
         self.subscribe_parser = SubscribeOptParser()
 
+    def emptyline(self):
+        '''Overriding to avoid resending last cmd on empty line.
+        '''
+        pass
+
     def postcmd(self, stop, line):
         if line.strip():
             self.cmd_cnt += 1
