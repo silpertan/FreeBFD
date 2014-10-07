@@ -108,6 +108,12 @@ class Commander(cmd.Cmd):
 
         self.subscribe_parser = SubscribeOptParser()
 
+    def send(self, data):
+        try:
+            self.sock.sendall(data)
+        except socket.error as err:
+            print err
+
     def do_quit(self, line):
         '''Quit the monitor.
         '''
@@ -118,7 +124,7 @@ class Commander(cmd.Cmd):
 
         Does not json encode the data.
         '''
-        self.sock.sendall(line)
+        self.send(line)
 
     def do_subscribe(self, line):
         '''Subscribe to a session.
@@ -159,7 +165,7 @@ class Commander(cmd.Cmd):
 
             if not errs:
                 msg = MonitorMsg('Subscribe', SessionID(*args), sess_opts)
-                self.sock.sendall(msg.to_json())
+                self.send(msg.to_json())
         else:
             sys.stderr.write("Missing required arguments.\n")
 
@@ -171,7 +177,7 @@ class Commander(cmd.Cmd):
         argv = shlex.split(line)
         if argv:
             msg = MonitorMsg('Unsubscribe', SessionID(*argv))
-            self.sock.sendall(msg.to_json())
+            self.send(msg.to_json())
         else:
             sys.stderr.write("Missing required arguments.\n")
 
