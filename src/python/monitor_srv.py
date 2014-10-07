@@ -52,6 +52,7 @@ def main():
 
                 if s is sock:
                     conn,cli_addr = s.accept()
+                    sys.stderr.write('New Connection: %s\n' % str(cli_addr))
                     fd_to_socket[conn.fileno()] = conn
                     poller.register(conn, READ_ONLY)
                     msg_queues[conn] = Queue.Queue()
