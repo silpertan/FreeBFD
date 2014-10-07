@@ -59,7 +59,7 @@ $(AVL_DIR)/README:
 	tar -C $(OUTDIR) -xvzf $(AVL_TARFILE)
 
 $(AVL_DIR)/libavl.a: $(AVL_DIR)/README
-	(cd $(AVL_DIR); ./configure; make)
+	cd $(AVL_DIR) && ./configure && make
 
 $(OUTDIR)/bfd: $(core/OBJS) $(bfd/OBJS)
 	@echo "LINK $@"
