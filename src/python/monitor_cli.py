@@ -11,6 +11,7 @@ import json
 import cmd
 import optparse
 import shlex
+import threading
 
 CTRL_ADDR = ('localhost', 5643)
 
@@ -105,8 +106,15 @@ class Commander(cmd.Cmd):
     def __init__(self, sock):
         cmd.Cmd.__init__(self, stdout=sys.stdout)
         self.sock = sock
-
+        self.cmd_cnt = 1
+        self.prompt = '[%04d] >>> ' % self.cmd_cnt
         self.subscribe_parser = SubscribeOptParser()
+
+    def postcmd(self, stop, line):
+        if line.strip():
+            self.cmd_cnt += 1
+            self.prompt = '[%04d] >>> ' % self.cmd_cnt
+        return stop
 
     def send(self, data):
         try:
@@ -181,9 +189,61 @@ class Commander(cmd.Cmd):
         else:
             sys.stderr.write("Missing required arguments.\n")
 
-def main():
-    poller = select.poll()
 
+class SocketReader(threading.Thread):
+    def __init__(self, sock):
+        threading.Thread.__init__(self)
+        self.sock = sock
+        self.isRunning = True
+        self.socket_map = {
+            self.sock.fileno(): sock,
+        }
+
+    def stop(self):
+        print 'Stopping SocketReader'
+        self.isRunning = False
+        self.join(5)
+        if self.isAlive():
+            raise Exception('Failed to stop SocketReader thread.')
+
+    def run(self):
+        print 'Starting SocketReader'
+
+        try:
+            poller = select.poll()
+            poller.register(self.sock, READ_ONLY)
+
+            while self.isRunning:
+                events = poller.poll(0.1)
+
+                for fd, flag in events:
+                    if flag & (select.POLLIN | select.POLLPRI):
+                        s = self.socket_map[fd]
+
+                        if s is self.sock:
+                            data = self.sock.recv(256)
+                            if not data:
+                                print 'Monitor server closed connection.\n'
+                                self.isRunning = False
+                                break
+                            print 'RECV:', data.strip()
+        finally:
+            print 'closing socket\n'
+            self.sock.close()
+
+
+INTRO = '''
+=======================
+ Python Monitor Client
+=======================
+
+Type "help" for list of commands.
+Type "help <cmd>" for help on command.
+
+-----------------------
+'''
+
+def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     sys.stderr.write('connecting to %s\n' % str(CTRL_ADDR))
@@ -193,48 +253,15 @@ def main():
         sys.stderr.write('%s\n' % msg)
         sys.exit(1)
 
-    cmdr = Commander(sock)
+    th = SocketReader(sock)
+    th.start()
 
     try:
-        isRunning = True
-        count = 0
-
-        fd_to_socket = {
-            sock.fileno(): sock,
-            sys.stdin.fileno(): sys.stdin,
-        }
-
-        poller.register(sock, READ_ONLY)
-        poller.register(sys.stdin, READ_ONLY)
-
-        while isRunning:
-            sys.stderr.write('[%04d] >>> ' % count)
-            events = poller.poll()
-
-            for fd, flag in events:
-                s = fd_to_socket[fd]
-
-                if flag & (select.POLLIN | select.POLLPRI):
-                    if s is sock:
-                        data = sock.recv(256)
-                        if data.strip():
-                            sys.stderr.write('RECV: "%s"\n' % data)
-                        else:
-                            sys.stderr.write('Monitor Server closed connection.\n')
-                            isRunning = False
-                            break
-
-                    if s is sys.stdin:
-                        count += 1
-                        data = sys.stdin.readline().strip()
-                        if data:
-                            if cmdr.onecmd(data):
-                                isRunning = False
-                                break
-
+        cmdr = Commander(sock)
+        cmdr.cmdloop(INTRO)
     finally:
-        sys.stderr.write('closing socket\n')
-        sock.close()
+        th.stop()
+
 
 if __name__ == '__main__':
     try:
