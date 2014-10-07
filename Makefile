@@ -32,20 +32,26 @@ else
     Q = @
 endif
 
-define do_include
-  SRCS:=
-  include src/$(1)
-  $(dir $(1))SRCS:=$$(addprefix src/$(dir $(1)),$$(SRCS))
-  $(dir $(1))OBJS:=$$(addprefix $(OUTDIR)/,$$(patsubst %.c,%.o,$$(notdir $$($(dir $(1))SRCS))))
+SRCDIRS := core
+SRCDIRS += monitor
+SRCDIRS += bfd
+SRCDIRS += bfdd
 
-  # create a dependency from each .o to each .c
-  $$(foreach src,$$($(dir $(1))SRCS),$$(eval $$(addprefix $(OUTDIR)/,$$(patsubst %.c,%.o,$$(notdir $$(src)))): $$(src)))
+define do_include
+  SRCS :=
+  include src/$(1)/make.mk
+  $(1)_SRCS := $$(SRCS)
+  $(1)_OBJS := $$($(1)_SRCS:%.c=$(OUTDIR)/%.o)
 endef
 
-MKMK := $(shell cd src ; find * -name make.mk)
-$(foreach mkmk,$(MKMK),$(eval $(call do_include,$(mkmk))))
+$(foreach srcdir,$(SRCDIRS),$(eval $(call do_include,$(srcdir))))
 
-%.o:
+EMPTY :=
+SPACE := $(EMPTY) $(EMPTY)
+
+VPATH = $(subst $(SPACE),:,$(addprefix src/,$(SRCDIRS)))
+
+$(OUTDIR)/%.o: %.c
 	@echo CC $@
 	@$(CC) $(CFLAGS) -E $(GEN_DEPS) -o /dev/null $< || exit 0
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
@@ -61,11 +67,11 @@ $(AVL_DIR)/README:
 $(AVL_DIR)/libavl.a: $(AVL_DIR)/README
 	cd $(AVL_DIR) && ./configure && make
 
-$(OUTDIR)/bfd: $(core/OBJS) $(bfd/OBJS)
+$(OUTDIR)/bfd: $(core_OBJS) $(bfd_OBJS)
 	@echo "LINK $@"
 	$(Q)$(CC_LINK) -o $@ $^ $(LIBS)
 
-$(OUTDIR)/bfdd: $(core/OBJS) $(monitor/OBJS) $(bfdd/OBJS)
+$(OUTDIR)/bfdd: $(core_OBJS) $(monitor_OBJS) $(bfdd_OBJS)
 	@echo "LINK $@"
 	$(Q)$(CC_LINK) -o $@ $^ $(LIBS) -lconfig
 
