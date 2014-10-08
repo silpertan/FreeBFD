@@ -1,1 +1,1 @@
-SRCS := bfdmonlib.c
+SRCS := bfdmonClient.c

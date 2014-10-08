@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-#include "bfdmon.h"
+#include "bfdmonClient.h"
 
 void bfdmon_init(void)
 {

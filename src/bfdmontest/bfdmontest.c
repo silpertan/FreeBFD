@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-#include "bfdmon.h"
+#include "bfdmonClient.h"
 
 int main(int argc, char **argv)
 {
