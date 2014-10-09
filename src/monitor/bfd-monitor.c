@@ -115,7 +115,7 @@ const char *NotifyJsonFmt = "{ "
         "\"LocalPort\":%d "
     "}, "
     "\"State\":\"%s\" "
-"}";
+"}\n";
 
 /* Callback to be installed in session via bfdSubscribe() during
    subscribe operation. */
