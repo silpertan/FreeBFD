@@ -37,6 +37,7 @@ void tpStartSecTimer(tpTimer *t, uint32_t timeout, tpTimerAction action, void *a
 void tpStartTimer(tpTimer *t, struct timeval *timeout, tpTimerAction action, void *arg);
 void tpStopTimer(tpTimer *t);
 void tpDoEventLoop(void);
+void tpStopEventLoop(void);
 void tpInitTimers(void);
 int64_t tpGetTimeRemaining(tpTimer *t);
 int tpSetSignalActor(tpSigActor actor, int sig);

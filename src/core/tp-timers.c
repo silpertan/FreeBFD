@@ -45,6 +45,9 @@ static sigset_t caughtSigset;
 static sigset_t activeSigset;
 static tpSigActor sigActors[TP_MAXSIGNALS];
 
+/* Flag for kicking out of event loop. */
+static int exitEventLoopRequest;
+
 /*
  * tpSetSktActor - set the socket actor function for a given socket.
  *
@@ -393,9 +396,15 @@ static void tpCheckSignals(void)
 }
 
 /*
+ * tpStopEventLoop - Set flag so that event loop exits.
+ */
+void tpStopEventLoop(void)
+{
+    exitEventLoopRequest = 1;
+}
+
+/*
  * tpDoEventLoop - monitor for events and call actor functions.
- *
- * Comments:        Never returns.
  */
 void tpDoEventLoop(void)
 {
@@ -404,7 +413,7 @@ void tpDoEventLoop(void)
   struct timeval *nextTimer;
 
   /* Receive and respond to events */
-  while (1) {
+  while (exitEventLoopRequest == 0) {
     /* Check for expired timers */
     nextTimer = tpCheckTimers();
     /* Check for signals */
