@@ -6,9 +6,17 @@
 #include <unistd.h>
 #include <errno.h>
 #include <inttypes.h>
+#include <arpa/inet.h>
 
 #include "bfd.h"
 #include "bfdmonClient.h"
+#include "tp-timers.h"
+
+struct Session_ {
+    struct Session_ *next;
+    bfdSession bfd;
+};
+typedef struct Session_ Session;
 
 const char *UsageFmtStr =
     "Usage: %s <monitor-host> <session-file>\n"
@@ -64,6 +72,20 @@ Session *load_session_file(const char *fname)
         if (sscanf(line, "%15s %"SCNu16" %15s %"SCNu16"%n", sn->PeerAddrStr,
                    &sn->PeerPort, sn->LocalAddrStr, &sn->LocalPort, &n) == 4)
         {
+            if (inet_aton(sn->PeerAddrStr, &sn->PeerAddr) == 0)
+            {
+                fprintf(stderr, "Badly formated Peer Address: %s\n", sn->PeerAddrStr);
+                continue;
+            }
+
+            if (inet_aton(sn->LocalAddrStr, &sn->LocalAddr) == 0)
+            {
+                fprintf(stderr, "Badly formated Local Address: %s\n", sn->LocalAddrStr);
+                continue;
+            }
+
+            bfdSessionSetStrings(sn);
+
             psn = (Session *)malloc(sizeof(Session));
             if (!psn)
             {
@@ -127,11 +149,70 @@ void dump_session_list(Session *psn)
     }
 }
 
+#define BUF_SZ 1024
+
+static void monitorSktActor(int sock, void *arg)
+{
+    ssize_t res;
+    char buf[BUF_SZ+1];
+
+    res = read(sock, buf, BUF_SZ);
+
+    if (res < 0)
+    {
+        if (errno == EINTR)
+            return;
+
+        fprintf(stderr, "failed in read(): %s\n", strerror(errno));
+        exit(1);
+    }
+    else if (res == 0)
+    {
+        /* EOF on stream. */
+        close(sock);
+        tpRmSktActor(sock);
+        tpStopEventLoop();
+        fprintf(stderr, "Connection to monitor server closed.\n");
+    }
+    else
+    {
+        /* Buffer may not have been terminated by read(). */
+        if (res && (buf[res-1] == '\n'))
+            buf[res-1] = '\0';
+        else
+            buf[res] = '\0';
+
+        fprintf(stderr, "RECV: size=%zd: msg='%s'\n", res, buf);
+    }
+}
+
+typedef struct BfdMonData_ {
+    int sock;
+    Session *sn_list;
+} BfdMonData;
+
+/*
+ * Single-shot timer handler that is called once when the event loop
+ * is started. Used to perform the session subscription request after
+ * we can handle the async responses from the monitor server.
+ */
+static void monitorStartupTimerActor(tpTimer *t, void *arg)
+{
+    BfdMonData *data = (BfdMonData *)arg;
+    Session *psn = data->sn_list;
+
+    while (psn)
+    {
+        bfdmonClient_SubscribeSession(data->sock, &psn->bfd);
+        psn = psn->next;
+    }
+}
+
 int main(int argc, char **argv)
 {
     const char *monitor_server;
-    Session *sn_list;
-    int sock;
+    BfdMonData data[1];
+    tpTimer startupTimer;
 
     if (argc != 3)
     {
@@ -140,19 +221,23 @@ int main(int argc, char **argv)
     }
 
     monitor_server = argv[1];
-    sn_list = load_session_file(argv[2]);
-    dump_session_list(sn_list);
+    data->sn_list = load_session_file(argv[2]);
+    dump_session_list(data->sn_list);
 
     printf("Starting bfdmontest application.\n");
-    sock = bfdmonClient_init(monitor_server);
-    if (sock < 0)
+    data->sock = bfdmonClient_init(monitor_server);
+    if (data->sock < 0)
     {
         fprintf(stderr, "Failed to connect to monitor server.\n");
         exit(3);
     }
 
-    sleep(3);
-    close(sock);
+    tpInitTimers();
+    tpStartSecTimer(&startupTimer, 0, monitorStartupTimerActor, data);
+
+    tpSetSktActor(data->sock, monitorSktActor, NULL, NULL);
+
+    tpDoEventLoop();
 
     return 0;
 }

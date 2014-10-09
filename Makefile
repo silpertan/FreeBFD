@@ -14,9 +14,9 @@ GEN_CFLAGS += $(shell pkg-config --cflags json-c)
 
 INC = -Isrc/inc -I$(AVL_DIR)
 override CFLAGS := $(GEN_CFLAGS) $(INC) $(CFLAGS)
-CC_LINK = $(CC) -L$(OUTDIR)
+CC_LINK = $(CC) -L$(OUTDIR) -L$(AVL_DIR)
 
-LIBS = -L$(AVL_DIR) -lavl
+LIBS = -lavl
 LIBS += $(shell pkg-config --libs json-c)
 
 EXE_FILES  = $(OUTDIR)/bfd
@@ -88,9 +88,9 @@ $(OUTDIR)/libbfdmon.a: $(libbfdmon_OBJS)
 	$(Q)$(AR) cru $@ $(libbfdmon_OBJS)
 	$(Q)$(RANLIB) $@
 
-$(OUTDIR)/bfdmontest: $(bfdmontest_OBJS) $(OUTDIR)/libbfdmon.a
+$(OUTDIR)/bfdmontest: $(bfdmontest_OBJS) $(core_OBJS) $(OUTDIR)/libbfdmon.a
 	@echo "LINK $@"
-	$(Q)$(CC_LINK) -o $@ $(bfdmontest_OBJS) -lbfdmon
+	$(Q)$(CC_LINK) -o $@ $(bfdmontest_OBJS) $(core_OBJS) $(LIBS) -lbfdmon
 
 clean:
 	rm -f $(OUTDIR)/*.o $(EXE_FILES)

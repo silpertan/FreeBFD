@@ -3,12 +3,6 @@
 
 #include "bfd.h"
 
-struct Session_ {
-    struct Session_ *next;
-    bfdSession bfd;
-};
-typedef struct Session_ Session;
-
 typedef enum BfdMonLogLvl_ {
     BFDMON_LOG_DEBUG,
     BFDMON_LOG_INFO,
