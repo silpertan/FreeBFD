@@ -90,10 +90,10 @@ $(OUTDIR)/libbfdmon.a: $(libbfdmon_OBJS)
 
 $(OUTDIR)/bfdmontest: $(bfdmontest_OBJS) $(core_OBJS) $(OUTDIR)/libbfdmon.a
 	@echo "LINK $@"
-	$(Q)$(CC_LINK) -o $@ $(bfdmontest_OBJS) $(core_OBJS) -lbfdmon $(LIBS)
+	$(Q)$(CC_LINK) -o $@ $(bfdmontest_OBJS) -lbfdmon $(LIBS)
 
 clean:
-	rm -f $(OUTDIR)/*.o $(EXE_FILES)
+	rm -f $(OUTDIR)/*.o $(OUTDIR)/*.a $(EXE_FILES)
 
 realclean:
 	rm -rf $(OUTDIR) *~ *.bak

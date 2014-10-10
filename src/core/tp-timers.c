@@ -9,14 +9,15 @@
  * actor or timer actor routines when the events occur.
  */
 
+#include <stdio.h>
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/time.h>
-#include "bfdLog.h"
 #include "avl.h"
 #define TP_PRIVATE
 #include "tp-timers.h"
@@ -438,7 +439,7 @@ void tpDoEventLoop(void)
     } else if (n < 0) {
       if (errno == EINTR) { continue; }
 
-      bfdLog(LOG_ERR, "Error in select(): %m\n");
+      fprintf(stderr, "Error in select(): %s\n", strerror(errno));
 
       /* FIXME: This is most likely not the desired behaviour in
          production. Need to figure out which error are recoverable
