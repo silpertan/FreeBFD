@@ -2,9 +2,6 @@
  TODO
 ======
 
-* Design and implement monitor client library.
-  - Need to move sendall() and session id json parsing into code that is shared
-    with client library and bfd core.
 * Improve scalability of total number of socket actors (currently
   limited to < 20).
 * Allow bind()ing a session to a specific local IP address (thus tying
