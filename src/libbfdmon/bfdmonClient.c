@@ -1,13 +1,36 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <netdb.h>
 #include <inttypes.h>
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
 #include <inttypes.h>
+#include <json.h>
+#include <arpa/inet.h>
 
 #include "bfdmonClient.h"
 #include "bfd-monitor.h"
+#include "avl.h"
+
+struct Subscription_ {
+    bfdSession *sn;
+    BfdMonNotifyCallback notify_cb;
+    void *cb_arg;
+};
+typedef struct Subscription_ Subscription;
+
+/* Container for subscriptions. */
+avl_tree *subscriptionTree;
+
+static int bfdmonClient_SubscriptionCompare(const void *v1, const void *v2,
+                                            void *param)
+{
+    Subscription *s1 = (Subscription *)v1;
+    Subscription *s2 = (Subscription *)v2;
+
+    return bfdSessionCompare(s1->sn, s2->sn);
+}
 
 const char *bfdmonClientLogLvlStr(BfdMonLogLvl lvl)
 {
@@ -70,13 +93,18 @@ static int inetConnect(const char *host, uint16_t portNum)
 }
 
 /*
- * Returns a file descriptor for a socket connected to the montiro
+ * Returns a file descriptor for a socket connected to the monitor
  * server.
  * Return -1 on error.
  */
 int bfdmonClient_init(const char *monitor_server)
 {
     bfdmonClientDebug("bfdmon: Initializing\n");
+
+    if (!subscriptionTree)
+    {
+        subscriptionTree = avl_create(bfdmonClient_SubscriptionCompare, NULL);
+    }
 
     return inetConnect(monitor_server, DEFAULT_MONITOR_PORT);
 }
@@ -126,14 +154,42 @@ const char *BfdSessionOptsFmt =
 /* TODO: Need to add a callback mechanism here and a structure to
    track all subscriptions. */
 
-void bfdmonClient_SubscribeSession(int sock, bfdSession *sn)
+void bfdmonClient_SubscribeSession(int sock, bfdSession *sn,
+                                   BfdMonNotifyCallback notify_cb, void *cb_arg)
 {
     int len;
     ssize_t sent;
     char buf[1024];
     char opts[512];
+    Subscription find[1] = {{ .sn = sn }};
+    Subscription *psub;
+
+    psub = avl_find(subscriptionTree, find);
+    if (psub)
+    {
+        bfdmonClientInfo("Already subscribed to Session: %s\n", sn->SnIdStr);
+        return;
+    }
 
     bfdmonClientInfo("Subscribing to Session: %s\n", sn->SnIdStr);
+
+    psub = (Subscription *)malloc(sizeof(Subscription));
+    if (!psub)
+    {
+        bfdmonClientErr("malloc() failed\n");
+        return;
+    }
+    psub->sn = (bfdSession *)malloc(sizeof(bfdSession));
+    if (!psub->sn)
+    {
+        bfdmonClientErr("malloc() failed\n");
+        free(psub);
+        return;
+    }
+
+    memcpy(psub->sn, sn, sizeof(bfdSession));
+    psub->notify_cb = notify_cb;
+    psub->cb_arg = cb_arg;
 
     snprintf(opts, sizeof(opts), BfdSessionOptsFmt,
              sn->DemandMode ? "on" : "off", sn->DetectMult,
@@ -149,35 +205,196 @@ void bfdmonClient_SubscribeSession(int sock, bfdSession *sn)
     {
         bfdmonClientErr("Error sending subscription request: %s\n",
                         strerror(errno));
+
+        free(psub->sn);
+        free(psub);
         return;
     }
 
     bfdmonClientDebug("Sent %zd of %d bytes of subscription request.\n",
                       sent, len);
+
+    avl_insert(subscriptionTree, psub);
+
+    bfdmonClientInfo("Subscription to Session succeeded: %s\n", sn->SnIdStr);
 }
 
-void bfdmonClient_UnsubscribeSession(int sock, bfdSession *sn)
+/* Return -1 on failure to subscribe, 0 if successful. */
+
+int bfdmonClient_UnsubscribeSession(int sock, bfdSession *sn)
 {
     int len;
     ssize_t sent;
     char buf[1024];
+    Subscription find[1] = {{ .sn = sn }};
+    Subscription *psub;
 
     bfdmonClientInfo("Unsubscribing from Session: %s\n", sn->SnIdStr);
 
+    psub = avl_delete(subscriptionTree, find);
+    if (!psub)
+    {
+        bfdmonClientInfo("Subscription not found for session: %s\n", sn->SnIdStr);
+        return -1;
+    }
+
     len = snprintf(buf, sizeof(buf), BfdJsonMsgFmt, "Unsubscribe",
-                   sn->PeerAddrStr, sn->PeerPort, sn->LocalAddrStr,
-                   sn->LocalPort, "");
+                   psub->sn->PeerAddrStr, psub->sn->PeerPort,
+                   psub->sn->LocalAddrStr, psub->sn->LocalPort, "");
 
     sent = sendall(sock, buf, len);
     if (sent < 0)
     {
         bfdmonClientErr("Error sending unsubscribe request: %s\n",
                         strerror(errno));
-        return;
+
+        /* Put sub back since we're still subscribed on the server. */
+        avl_insert(subscriptionTree, psub);
+        return -1;
     }
 
     bfdmonClientDebug("Sent %zd of %d bytes of unsubscribe request.\n",
                       sent, len);
+
+    free(psub->sn);
+    free(psub);
+
+    return 0;
+}
+
+static void bfdmonClient_NotifyDispatch(bfdSession *sn, bfdState state)
+{
+    Subscription find[1] = {{ .sn = sn }};
+    Subscription *psub;
+
+    psub = avl_find(subscriptionTree, find);
+    if (!psub)
+    {
+        bfdmonClientInfo("Notify failed, session not in subscriptions: %s\n",
+                         sn->SnIdStr);
+        return;
+    }
+
+    psub->notify_cb(psub->sn, state, psub->cb_arg);
+}
+
+static int bfdmonClient_NotifyParseSession(json_object *jso, bfdSession *sn,
+                                           bfdState *state)
+{
+    json_object *jso_obj;
+    json_object *item;
+    const char *str;
+
+    json_object_object_get_ex(jso, "SessionID", &jso_obj);
+    if (!jso_obj)
+    {
+        bfdmonClientErr("Missing 'SessionID' in json packet\n");
+        return -1;
+    }
+
+    sn->PeerAddr.s_addr = 0;
+    json_object_object_get_ex(jso_obj, "PeerAddr", &item);
+    if (item)
+    {
+        str = json_object_get_string(item);
+        if (inet_aton(str, &sn->PeerAddr) == 0)
+        {
+            bfdmonClientErr("Failed to convert 'PeerAddr' to IP address: %s\n",
+                            str);
+            return -1;
+        }
+    }
+    else
+    {
+        bfdmonClientErr("Missing 'PeerAddr' in json packet\n");
+        return -1;
+    }
+
+    /* All of the following are optional, do not generate an error on
+       failure to convert. */
+
+    sn->LocalAddr.s_addr = INADDR_ANY;
+    json_object_object_get_ex(jso_obj, "LocalAddr", &item);
+    if (item)
+    {
+        str = json_object_get_string(item);
+        if (inet_aton(str, &sn->LocalAddr) == 0)
+        {
+            bfdmonClientWarn("Failed to convert 'LocalAddr' to IP addr: %s\n",
+                             str);
+        }
+    }
+
+    sn->PeerPort = 0;
+    json_object_object_get_ex(jso_obj, "PeerPort", &item);
+    if (item)
+    {
+        sn->PeerPort = (uint16_t)(json_object_get_int(item) & 0xffff);
+    }
+
+    sn->LocalPort = 0;
+    json_object_object_get_ex(jso_obj, "LocalPort", &item);
+    if (item)
+    {
+        sn->LocalPort = (uint16_t)(json_object_get_int(item) & 0xffff);
+    }
+
+    bfdSessionSetStrings(sn);
+
+    bfdmonClientInfo("SessionID from json msg: %s\n", sn->SnIdStr);
+
+    json_object_object_get_ex(jso, "State", &jso_obj);
+    if (jso_obj)
+    {
+        str = json_object_get_string(jso_obj);
+        if (bfdStateFromStr(state, str) != 0)
+        {
+            bfdmonClientErr("failed to convert string to state: %s\n", str);
+            return -1;
+        }
+    }
+    else
+    {
+        bfdmonClientErr("missing 'State' in json packet\n");
+        return -1;
+    }
+
+    return 0;
+}
+
+static void bfdmonClient_NotifyParseAndDispatch(const char *buf)
+{
+    bfdSession sn[1];
+    bfdState state;
+    json_object *jso = json_tokener_parse(buf);
+    json_object *jso_type;
+
+    if (!jso)
+    {
+        bfdmonClientWarn("failed to parse json\n");
+        return;
+    }
+
+    json_object_object_get_ex(jso, "MsgType", &jso_type);
+    if (jso_type)
+    {
+        const char *msg_type = json_object_get_string(jso_type);
+        if (strcmp("Notify", msg_type) == 0)
+        {
+            if (bfdmonClient_NotifyParseSession(jso, sn, &state) == 0)
+                bfdmonClient_NotifyDispatch(sn, state);
+        }
+        else
+        {
+            bfdmonClientInfo("unknown message type: %s\n", msg_type);
+        }
+    }
+    else
+    {
+        bfdmonClientInfo("missing 'MsgType' in json\n");
+    }
+
+    json_object_put(jso);
 }
 
 #define BUF_SZ 1024
@@ -232,7 +449,7 @@ ssize_t bfdmonClient_NotifyReadAndDispatch(int sock, int *p_errno)
 
     bfdmonClientDebug("RECV: size=%zd: msg='%s'\n", res, buf);
 
-    /* TODO: Process notify json data */
+    bfdmonClient_NotifyParseAndDispatch(buf);
 
     return res;
 }

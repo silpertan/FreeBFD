@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <arpa/inet.h>
+#include <ctype.h>
 
 #include "bfd.h"
 #include "bfdmonClient.h"
@@ -67,6 +68,13 @@ Session *load_session_file(const char *fname)
         sn->DesiredMinTxInterval = BFDDFLT_DESIREDMINTX;
         sn->RequiredMinRxInterval = BFDDFLT_REQUIREDMINRX;
 
+        /* Check for commented out lines. */
+        p = line;
+        while (*p && isblank(*p))
+            p++;
+        if (*p == '#')
+            continue;
+
         /* Parse out the peer and local addresses and ports. Order is
            fixed and all are required. */
         if (sscanf(line, "%15s %"SCNu16" %15s %"SCNu16"%n", sn->PeerAddrStr,
@@ -74,13 +82,15 @@ Session *load_session_file(const char *fname)
         {
             if (inet_aton(sn->PeerAddrStr, &sn->PeerAddr) == 0)
             {
-                fprintf(stderr, "Badly formated Peer Address: %s\n", sn->PeerAddrStr);
+                fprintf(stderr, "Badly formated Peer Address: %s\n",
+                        sn->PeerAddrStr);
                 continue;
             }
 
             if (inet_aton(sn->LocalAddrStr, &sn->LocalAddr) == 0)
             {
-                fprintf(stderr, "Badly formated Local Address: %s\n", sn->LocalAddrStr);
+                fprintf(stderr, "Badly formated Local Address: %s\n",
+                        sn->LocalAddrStr);
                 continue;
             }
 
@@ -98,7 +108,8 @@ Session *load_session_file(const char *fname)
             psn->next = sn_list;
             sn_list = psn;
 
-            /* Parse out the session options. They can be in any order, or not present. */
+            /* Parse out the session options. They can be in any
+               order, or not present. */
             p = line + n;
             while (p < (line + len))
             {
@@ -173,6 +184,12 @@ static void monitorSktActor(int sock, void *arg)
     }
 }
 
+static void monitorNotifyHandler(bfdSession *sn, bfdState state, void *arg)
+{
+    fprintf(stderr, "Session %s: state=%d -> %s\n", sn->SnIdStr, state,
+            bfdStateToStr(state));
+}
+
 typedef struct BfdMonData_ {
     int sock;
     Session *sn_list;
@@ -190,7 +207,8 @@ static void monitorStartupTimerActor(tpTimer *t, void *arg)
 
     while (psn)
     {
-        bfdmonClient_SubscribeSession(data->sock, &psn->bfd);
+        bfdmonClient_SubscribeSession(data->sock, &psn->bfd,
+                                      monitorNotifyHandler, NULL);
         psn = psn->next;
     }
 }

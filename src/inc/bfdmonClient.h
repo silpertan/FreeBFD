@@ -10,6 +10,8 @@ typedef enum BfdMonLogLvl_ {
     BFDMON_LOG_ERR
 } BfdMonLogLvl;
 
+typedef void (*BfdMonNotifyCallback)(bfdSession *sn, bfdState state, void *arg);
+
 /* User of library must provide the bfdmonClientLog() function. */
 extern void bfdmonClientLog(BfdMonLogLvl lvl, const char *file, int line,
                             const char *fmt, ...);
@@ -29,8 +31,10 @@ extern void bfdmonClientLog(BfdMonLogLvl lvl, const char *file, int line,
 extern const char *bfdmonClientLogLvlStr(BfdMonLogLvl lvl);
 
 extern int bfdmonClient_init(const char *monitor_server);
-extern void bfdmonClient_SubscribeSession(int sock, bfdSession *sn);
-extern void bfdmonClient_UnsubscribeSession(int sock, bfdSession *sn);
+extern void bfdmonClient_SubscribeSession(int sock, bfdSession *sn,
+                                          BfdMonNotifyCallback notify_cb,
+                                          void *cb_arg);
+extern int bfdmonClient_UnsubscribeSession(int sock, bfdSession *sn);
 extern ssize_t bfdmonClient_NotifyReadAndDispatch(int sock, int *p_errno);
 
 #endif  /* BFDMON_CLIENT_H */
