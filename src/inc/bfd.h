@@ -74,4 +74,6 @@ void bfdStartPollSequence(int sig);
 const char *bfdStateToStr(bfdState state);
 void bfdSessionSetStrings(bfdSession *bfd);
 
+int bfdSessionCompare(bfdSession *s1, bfdSession *s2);
+
 #endif /* _BFD_H_ */

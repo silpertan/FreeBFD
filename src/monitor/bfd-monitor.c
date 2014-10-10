@@ -41,25 +41,6 @@ typedef struct Connection {
 
 static avl_tree *connectionTree;
 
-static int bfdMonitorSessionIdCompare(bfdSession *s1, bfdSession *s2)
-{
-  int cmp = (int)(s1->PeerAddr.s_addr) - (int)(s2->PeerAddr.s_addr);
-
-    if (cmp == 0) {
-      cmp = (int)(s1->LocalAddr.s_addr) - (int)(s2->LocalAddr.s_addr);
-    }
-
-    if (cmp == 0) {
-      cmp = s1->PeerPort - s2->PeerPort;
-    }
-
-    if (cmp == 0) {
-      cmp = s1->LocalPort - s2->LocalPort;
-    }
-
-    return cmp;
-}
-
 static int bfdMonitorCompare(const void *v1, const void *v2, void *param)
 {
     Monitor_t *m1 = (Monitor_t *)v1;
@@ -68,7 +49,7 @@ static int bfdMonitorCompare(const void *v1, const void *v2, void *param)
     int cmp = m1->sock - m2->sock;
 
     if (cmp == 0) {
-      return bfdMonitorSessionIdCompare(&m1->Sn, &m2->Sn);
+      return bfdSessionCompare(&m1->Sn, &m2->Sn);
     }
 
     return cmp;

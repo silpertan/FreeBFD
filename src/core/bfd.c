@@ -399,6 +399,27 @@ void bfdSendCPkt(bfdSessionInt *bfd, int fbit)
   bfdStartXmtTimer(bfd);
 }
 
+int bfdSessionCompare(bfdSession *s1, bfdSession *s2)
+{
+  int cmp = (int)(s1->PeerAddr.s_addr) - (int)(s2->PeerAddr.s_addr);
+
+  if (cmp == 0) {
+    cmp = (int)(s1->LocalAddr.s_addr) - (int)(s2->LocalAddr.s_addr);
+  }
+
+  if (cmp == 0) {
+    cmp = s1->PeerPort - s2->PeerPort;
+  }
+
+  if (cmp == 0) {
+    cmp = s1->LocalPort - s2->LocalPort;
+  }
+
+  return cmp;
+}
+
+
+
 /* Searches for an exact match using the Session Discriminator
  * values in the bfdSession.
  */
@@ -409,11 +430,7 @@ static bfdSessionInt *bfdMatchSession(bfdSession *_bfd)
 
   hkey = BFD_MKHKEY(_bfd->PeerAddr.s_addr);
   for (bfd = peerHash[hkey]; bfd != NULL; bfd = bfd->PeerNext) {
-    if (bfd->Sn.PeerAddr.s_addr == _bfd->PeerAddr.s_addr &&
-        bfd->Sn.LocalAddr.s_addr == _bfd->LocalAddr.s_addr &&
-        bfd->Sn.PeerPort == _bfd->PeerPort &&
-        bfd->Sn.LocalPort == _bfd->LocalPort)
-    {
+    if (bfdSessionCompare(&bfd->Sn, _bfd) == 0) {
       return(bfd);
     }
   }
