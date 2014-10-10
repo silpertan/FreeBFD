@@ -770,6 +770,28 @@ const char *bfdStateToStr(bfdState state)
 }
 
 /*
+ * Converts a string into a bfdState.
+ *
+ * Return 0 on successful conversion, -1 on failure.
+ */
+int bfdStateFromStr(bfdState *state, const char *str)
+{
+  if (strcmp(str, "AdminDown") == 0)
+    *state = BFDSTATE_ADMINDOWN;
+  else if (strcmp(str, "Down") ==0)
+    *state = BFDSTATE_DOWN;
+  else if (strcmp(str, "Init") == 0)
+    *state = BFDSTATE_INIT;
+  else if (strcmp(str, "Up") == 0)
+    *state = BFDSTATE_UP;
+  else
+    return -1;
+
+  return 0;
+}
+
+
+/*
  * Must be called immediately after the PeerAddr, LocalAddr, PeerPort
  * and LocalPort fields have been set.
  */

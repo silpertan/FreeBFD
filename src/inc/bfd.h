@@ -72,6 +72,8 @@ void bfdToggleAdminDown(int sig);
 void bfdStartPollSequence(int sig);
 
 const char *bfdStateToStr(bfdState state);
+int bfdStateFromStr(bfdState *state, const char *str);
+
 void bfdSessionSetStrings(bfdSession *bfd);
 
 int bfdSessionCompare(bfdSession *s1, bfdSession *s2);
