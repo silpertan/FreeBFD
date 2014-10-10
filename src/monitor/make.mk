@@ -1,1 +1,1 @@
-SRCS := bfd-monitor.c
+SRCS := bfdmonServer.c
