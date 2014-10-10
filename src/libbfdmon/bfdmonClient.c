@@ -123,6 +123,9 @@ const char *BfdSessionOptsFmt =
     " \"RequiredMinRxInterval\":%"PRIu32""
     " }";
 
+/* TODO: Need to add a callback mechanism here and a structure to
+   track all subscriptions. */
+
 void bfdmonClient_SubscribeSession(int sock, bfdSession *sn)
 {
     int len;
@@ -175,4 +178,61 @@ void bfdmonClient_UnsubscribeSession(int sock, bfdSession *sn)
 
     bfdmonClientDebug("Sent %zd of %d bytes of unsubscribe request.\n",
                       sent, len);
+}
+
+#define BUF_SZ 1024
+
+/*
+ * Reads data from the socket connected to the monitor server.
+ *
+ * Tries to parse out json notification message and dispatch the
+ * notification via the a callback tied to the session at subscribe
+ * time.
+ *
+ * Returns:
+ *
+ *   <0: Read failed, caller should check errno, may not be recoverable.
+ *       The value of errno will be copied into the *p_errno argument.
+ *    0: Socket connection was closed by server.
+ *   >0: Read data succesfully, caller should just continue.
+ */
+ssize_t bfdmonClient_NotifyReadAndDispatch(int sock, int *p_errno)
+{
+    ssize_t res;
+    char buf[BUF_SZ+1];
+
+    if (p_errno)
+        *p_errno = 0;
+
+    res = read(sock, buf, BUF_SZ);
+
+    if (res < 0)
+    {
+        if (errno == EINTR)
+            return 1;           /* Caller should just continue. */
+
+        if (p_errno)
+            *p_errno = errno;   /* Caller will handle errno. */
+        else
+            bfdmonClientWarn("error in read(): %s\n", strerror(errno));
+
+        return -1;
+    }
+    else if (res == 0)
+    {
+        /* EOF on stream. */
+        return 0;
+    }
+
+    /* Buffer may not have been terminated by read(). */
+    if (res && (buf[res-1] == '\n'))
+        buf[res-1] = '\0';
+    else
+        buf[res] = '\0';
+
+    bfdmonClientDebug("RECV: size=%zd: msg='%s'\n", res, buf);
+
+    /* TODO: Process notify json data */
+
+    return res;
 }

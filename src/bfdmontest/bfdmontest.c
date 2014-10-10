@@ -154,16 +154,13 @@ void dump_session_list(Session *psn)
 static void monitorSktActor(int sock, void *arg)
 {
     ssize_t res;
-    char buf[BUF_SZ+1];
+    int local_errno = 0;
 
-    res = read(sock, buf, BUF_SZ);
+    res = bfdmonClient_NotifyReadAndDispatch(sock, &local_errno);
 
     if (res < 0)
     {
-        if (errno == EINTR)
-            return;
-
-        fprintf(stderr, "failed in read(): %s\n", strerror(errno));
+        fprintf(stderr, "failed in read(): %s\n", strerror(local_errno));
         exit(1);
     }
     else if (res == 0)
@@ -173,16 +170,6 @@ static void monitorSktActor(int sock, void *arg)
         tpRmSktActor(sock);
         tpStopEventLoop();
         fprintf(stderr, "Connection to monitor server closed.\n");
-    }
-    else
-    {
-        /* Buffer may not have been terminated by read(). */
-        if (res && (buf[res-1] == '\n'))
-            buf[res-1] = '\0';
-        else
-            buf[res] = '\0';
-
-        fprintf(stderr, "RECV: size=%zd: msg='%s'\n", res, buf);
     }
 }
 
