@@ -4,7 +4,6 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include "bfdInt.h"
-#include "bfdExtensions.h"
 #include "bfdLog.h"
 #include "tp-timers.h"
 
@@ -60,15 +59,6 @@ static bool setupRxSocket(bfdSessionInt *bfd)
   int rcvttl = 1;
   int sock;
   bfdSockRec *sockRec;
-
-  if (!bfdExtCheck(BFD_EXT_SPECIFYPORTS)) {
-    if (bfd->Sn.LocalPort != BFDDFLT_UDPPORT) {
-      bfdLog(LOG_WARNING, "Invalid local port: %d\n", bfd->Sn.LocalPort);
-      bfdLog(LOG_WARNING,
-             "Did you forget to enable the SpecifyPorts extension?\n");
-      return false;
-    }
-  }
 
   if ((sockRec = findSock(bfd)) == NULL) {
     sockRec = calloc(1, sizeof(bfdSockRec));
@@ -140,15 +130,6 @@ static bool setupTxSocket(bfdSessionInt *bfd)
   int ttlval = BFD_1HOPTTLVALUE;
   int pcount;
   int sock;
-
-  if (!bfdExtCheck(BFD_EXT_SPECIFYPORTS)) {
-    if (bfd->Sn.PeerPort != BFDDFLT_UDPPORT) {
-      bfdLog(LOG_WARNING, "Invalid remote port: %d\n", bfd->Sn.PeerPort);
-      bfdLog(LOG_WARNING,
-             "Did you forget to enable the SpecifyPorts extension?\n");
-      return false;
-    }
-  }
 
   /* Get socket for transmitting control packets */
   if ((sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {

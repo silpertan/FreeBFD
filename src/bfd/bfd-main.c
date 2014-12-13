@@ -11,7 +11,6 @@
 #include <stdbool.h>
 #include "bfd.h"
 #include "bfdLog.h"
-#include "bfdExtensions.h"
 #include "tp-timers.h"
 
 /*
@@ -27,29 +26,20 @@ static uint32_t defRequiredMinRx     = BFDDFLT_REQUIREDMINRX;
  */
 static void bfdUsage(void)
 {
-  int idx;
-
   fprintf(stderr, "Usage:\n");
-  fprintf(stderr, "\tbfdd -c connectaddr[:port] [-d] [-l localport] [-m mult] [-r tout] [-t tout] \n"
-                  "\t     [-v] [-x extension]\n");
+  fprintf(stderr, "\tbfdd -p <PeerAddress> [-d] [-m mult] [-r tout] [-t tout] \n"
+                  "\t     [-v] [-x <extension>[=<value>]]\n");
   fprintf(stderr, "Where:\n");
-  fprintf(stderr, "\t-c: create session with 'connectaddr' (required option)\n");
-  fprintf(stderr, "\t    optionally override dest port (default %d)\n", BFDDFLT_UDPPORT);
-  fprintf(stderr, "\t-l: listen on 'localport' (default %d)\n", BFDDFLT_UDPPORT);
+  fprintf(stderr, "\t-p: create session with 'PeerAddress' (required option)\n");
   fprintf(stderr, "\t-d: toggle demand mode desired (default %s)\n",
           BFDDFLT_DEMANDMODE? "on" : "off");
   fprintf(stderr, "\t-m mult: detect multiplier (default %d)\n", BFDDFLT_DETECTMULT);
   fprintf(stderr, "\t-r tout: required min rx (default %d)\n", BFDDFLT_REQUIREDMINRX);
   fprintf(stderr, "\t-t tout: desired min tx (default %d)\n", BFDDFLT_DESIREDMINTX);
   fprintf(stderr, "\t-v: increase level of debug output (can be repeated)\n");
-  fprintf(stderr, "\t-x extension: enable a named extension (can be repeated)\n");
-  for (idx=0; idx < BFD_EXT_MAX; idx++) {
-    const char* name;
-    const char* desc;
-
-    bfdExtDescribe(idx, &name, &desc);
-    fprintf(stderr, "\t\t%s\t%s\n", name, desc);
-  }
+  fprintf(stderr, "\t-x <extension>[=<value>]: configure a specific extension\n\t   (no spaces allowed)\n");
+  fprintf(stderr, "\t\tPeerPort=<peer UDP port #> (default %d)\n", BFDDFLT_UDPPORT);
+  fprintf(stderr, "\t\tLocalPort=<local UDP port #>\n");
   fprintf(stderr, "\n");
   fprintf(stderr, "Signals:\n");
   fprintf(stderr, "\tUSR1: start poll sequence on all demand mode sessions\n");
@@ -63,12 +53,11 @@ int main(int argc, char **argv)
 {
   int c;
   char *connectaddr = NULL;
-  char *cptr;
   struct hostent *hp;
-  struct in_addr peeraddr;
+  struct in_addr PeerAddr;
   struct in_addr localaddr = { .s_addr = INADDR_ANY };
-  uint16_t peerPort = BFDDFLT_UDPPORT;
-  uint16_t localPort = BFDDFLT_UDPPORT;
+  uint16_t PeerPort = BFDDFLT_UDPPORT;
+  uint16_t LocalPort = BFDDFLT_UDPPORT;
 
   bfdSession bfd;
 
@@ -78,38 +67,23 @@ int main(int argc, char **argv)
   bfdLogInit();
 
   /* Get command line options */
-  while ((c = getopt(argc, argv, "c:dhl:m:r:t:vx:")) != -1) {
+  while ((c = getopt(argc, argv, "dhm:p:r:t:vx:")) != -1) {
     switch (c) {
-    case 'c':
-      connectaddr = optarg;
-      if ((cptr = strchr(connectaddr, ':')) != NULL) {
-        uint32_t tmp;
-
-        *cptr = '\0';
-        cptr++;
-        sscanf(cptr, "%" SCNu32, &tmp);
-        peerPort = tmp & 0xffff;
-      }
-      break;
     case 'd':
       defDemandModeDesired = !defDemandModeDesired;
       break;
     case 'h':
       bfdUsage();
       exit(0);
-    case 'l':
-      if (sscanf(optarg, "%" SCNu16, &localPort) != 1) {
-         fprintf(stderr, "Arg 'localport' must be an integer\n\n");
-         bfdUsage();
-         exit(1);
-      }
-      break;
     case 'm':
       if (sscanf(optarg, "%" SCNu8, &defDetectMult) != 1) {
          fprintf(stderr, "Arg 'mult' must be an integer\n\n");
          bfdUsage();
          exit(1);
       }
+      break;
+    case 'p':
+      connectaddr = optarg;
       break;
     case 'r':
       if (sscanf(optarg, "%" SCNu32, &defRequiredMinRx) != 1) {
@@ -129,10 +103,36 @@ int main(int argc, char **argv)
       bfdLogMore();
       break;
     case 'x':
-      if (!bfdExtEnable(optarg)) {
-        fprintf(stderr, "Invalid extension: %s\n", optarg);
-        bfdUsage();
-        exit(1);
+      {
+        size_t l;
+        long int val;
+
+        l = strlen(optarg);
+
+        if (l > 9 && strncmp("PeerPort=", optarg, 9) == 0) {
+          val = strtol(optarg + 9, NULL, 10);
+          if (val <= 0 || val > 0xffff) {
+            fprintf(stderr, "PeerPort must be a 16-bit unsigned integer\n\n");
+            bfdUsage();
+            exit(1);
+          }
+
+          PeerPort = (uint16_t)val;
+        } else if (l > 10 && strncmp("LocalPort=", optarg, 10) == 0) {
+          val = strtol(optarg + 10, NULL, 10);
+
+          if (val <= 0 || val > 0xffff) {
+            fprintf(stderr, "LocalPort must be a 16-bit unsigned integer\n\n");
+            bfdUsage();
+            exit(1);
+          }
+
+          LocalPort = (uint16_t)val;
+        } else {
+          fprintf(stderr, "Unknown extension: %s\n\n", optarg);
+          bfdUsage();
+          exit(1);
+        }
       }
       break;
     default:
@@ -141,25 +141,9 @@ int main(int argc, char **argv)
     }
   }
 
-  if (!bfdExtCheck(BFD_EXT_SPECIFYPORTS)) {
-    if (peerPort != BFDDFLT_UDPPORT) {
-      fprintf(stderr, "Invalid remote port: %d\n", peerPort);
-      fprintf(stderr, "Did you forget to enable the SpecifyPorts extension?\n");
-      bfdUsage();
-      exit(1);
-    }
-
-    if (localPort != BFDDFLT_UDPPORT) {
-      fprintf(stderr, "Invalid local port: %d\n", localPort);
-      fprintf(stderr, "Did you forget to enable the SpecifyPorts extension?\n");
-      bfdUsage();
-      exit(1);
-    }
-  }
-
   /* Must have specified peer address */
   if (connectaddr == NULL) {
-    fprintf(stderr, "No peer address (connectaddr) specified\n");
+    fprintf(stderr, "No peer address specified (-p option is required)\n");
     bfdUsage();
     exit(1);
   }
@@ -187,7 +171,7 @@ int main(int argc, char **argv)
     exit(1);
   }
 
-  memcpy(&peeraddr, hp->h_addr, sizeof(peeraddr));
+  memcpy(&PeerAddr, hp->h_addr, sizeof(PeerAddr));
 
   memset(&bfd, 0, sizeof(bfdSession));
 
@@ -195,10 +179,10 @@ int main(int argc, char **argv)
   bfd.DetectMult            = defDetectMult;
   bfd.DesiredMinTxInterval  = defDesiredMinTx;
   bfd.RequiredMinRxInterval = defRequiredMinRx;
-  bfd.PeerAddr              = peeraddr;
+  bfd.PeerAddr              = PeerAddr;
   bfd.LocalAddr             = localaddr;
-  bfd.PeerPort              = peerPort;
-  bfd.LocalPort             = localPort;
+  bfd.PeerPort              = PeerPort;
+  bfd.LocalPort             = LocalPort;
 
   bfdSessionSetStrings(&bfd);
 
@@ -207,7 +191,7 @@ int main(int argc, char **argv)
          bfd.SnIdStr);
 
   if (!bfdCreateSession(&bfd)) {
-    bfdLog(LOG_ERR, "Can't creating initial session: %m\n");
+    bfdLog(LOG_ERR, "Can't create initial session\n");
     exit(1);
   }
 

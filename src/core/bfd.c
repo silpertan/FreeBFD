@@ -16,7 +16,6 @@
 #include "bfdInt.h"
 #include "tp-timers.h"
 #include "bfdLog.h"
-#include "bfdExtensions.h"
 
 #define UNUSED(x) { if(x){} }
 
