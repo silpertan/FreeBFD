@@ -83,7 +83,7 @@ int main(int argc, char **argv)
   tpSetSignalActor(bfdStartPollSequence, SIGUSR1);
   tpSetSignalActor(bfdToggleAdminDown, SIGUSR2);
 
-  if (!bfdd_handleConfigFile(configFile)) {
+  if (configFile && !bfdd_handleConfigFile(configFile)) {
     fprintf(stderr, "Error parsing config file\n");
     exit(1);
   }
