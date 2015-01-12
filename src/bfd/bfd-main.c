@@ -27,7 +27,7 @@ static uint32_t defRequiredMinRx     = BFDDFLT_REQUIREDMINRX;
 static void bfdUsage(void)
 {
   fprintf(stderr, "Usage:\n");
-  fprintf(stderr, "\tbfdd -p <PeerAddress> [-d] [-m mult] [-r tout] [-t tout] \n"
+  fprintf(stderr, "\tbfd -p <PeerAddress> [-d] [-m mult] [-r tout] [-t tout] \n"
                   "\t     [-v] [-x <extension>[=<value>]]\n");
   fprintf(stderr, "Where:\n");
   fprintf(stderr, "\t-p: create session with 'PeerAddress' (required option)\n");
