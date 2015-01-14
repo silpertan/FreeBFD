@@ -20,6 +20,14 @@ It consists of two processes:
     socket to create sessions and receive session state change
     notifications.
 
+Status
+------
+
+The implemenation is still quite immature. It is able to bring up and
+maintain a session with a Cisco router (and with another FreeBFD host),
+but it has not been tested thoroughly. Also, many of the design ideas
+are still being implemented (and documented).
+
 Dependencies
 ------------
 
