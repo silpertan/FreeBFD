@@ -23,7 +23,7 @@ static bfdSessionInt *sessionList;                  /* List of active sessions *
 static bfdSessionInt *sessionHash[BFD_HASHSIZE];    /* Find session from discriminator */
 static bfdSessionInt *peerHash[BFD_HASHSIZE];       /* Find session from peer address */
 
-static bfdSessionInt *bfdGetSession(bfdCpkt *cp, struct sockaddr_in *sin);
+static bfdSessionInt *bfdGetSession(uint8_t* cp, struct sockaddr_in *sin);
 static bfdSessionInt *bfdMatchSession(bfdSession *_bfd);
 static bfdSessionInt *bfdCreateSessionInt(bfdSession *_bfd);
 static void bfdXmtTimeout(tpTimer *tim, void *arg);
@@ -40,7 +40,7 @@ void bfdRcvPkt(int s, void *arg)
   struct msghdr *msg = (struct msghdr *)arg;
   ssize_t mlen;
   struct sockaddr_in *sin;
-  bfdCpkt *cp;
+  uint8_t* cp;
   struct cmsghdr *cm;
   bfdSessionInt *bfd;
   uint32_t oldXmtTime;
@@ -87,73 +87,73 @@ void bfdRcvPkt(int s, void *arg)
     return;
   }
 
-  cp = (bfdCpkt *)(msg->msg_iov->iov_base);
+  cp = (uint8_t*)(msg->msg_iov->iov_base);
 
   /* Various checks from RFC 5880, section 6.8.6 */
 
-  if (cp->version != BFD_VERSION) {
+  if (CPKT_GET_VERS(cp) != BFD_VERSION) {
     bfdLog(LOG_INFO, "Received bad version %d from %s:%d[%x]\n",
-           cp->version, inet_ntoa(sin->sin_addr),
-           ntohs(sin->sin_port), ntohl(cp->myDisc));
+           CPKT_GET_VERS(cp), inet_ntoa(sin->sin_addr),
+           ntohs(sin->sin_port), CPKT_GET_MY_DISCR(cp));
     return;
   }
 
-  if (cp->len < (cp->f_auth ? BFD_MINPKTLEN_AUTH : BFD_MINPKTLEN) ||
-      cp->len > mlen)
+  if (CPKT_GET_LEN(cp) < (CPKT_GET_AUTH(cp) ? BFD_MINPKTLEN_AUTH : BFD_MINPKTLEN) ||
+      CPKT_GET_LEN(cp) > mlen)
   {
     bfdLog(LOG_INFO, "Invalid length %d in control pkt from %s:%d[%x]\n",
-           cp->len, inet_ntoa(sin->sin_addr), ntohs(sin->sin_port),
-           ntohl(cp->myDisc));
+           CPKT_GET_LEN(cp), inet_ntoa(sin->sin_addr), ntohs(sin->sin_port),
+           CPKT_GET_MY_DISCR(cp));
     return;
   }
 
-  if (cp->detectMult == 0) {
+  if (CPKT_GET_DETECT_MULT(cp) == 0) {
     bfdLog(LOG_INFO, "Detect Mult is zero in pkt from %s:%d[%x]\n",
-           inet_ntoa(sin->sin_addr), ntohs(sin->sin_port), ntohl(cp->myDisc));
+           inet_ntoa(sin->sin_addr), ntohs(sin->sin_port), CPKT_GET_MY_DISCR(cp));
     return;
   }
 
-  if (cp->f_multipoint) {
+  if (CPKT_GET_MULTIPOINT(cp)) {
     bfdLog(LOG_INFO, "Unsupported multipoint flag in pkt from %s:%d[%x]\n",
-           inet_ntoa(sin->sin_addr), ntohs(sin->sin_port), ntohl(cp->myDisc));
+           inet_ntoa(sin->sin_addr), ntohs(sin->sin_port), CPKT_GET_MY_DISCR(cp));
     return;
   }
 
-  if (cp->myDisc == 0) {
+  if (CPKT_GET_MY_DISCR(cp) == 0) {
     bfdLog(LOG_INFO, "My discriminator is zero in pkt from %s:%d[%x]\n",
-           inet_ntoa(sin->sin_addr), ntohs(sin->sin_port), ntohl(cp->myDisc));
+           inet_ntoa(sin->sin_addr), ntohs(sin->sin_port), CPKT_GET_MY_DISCR(cp));
     return;
   }
 
   if ((bfd = bfdGetSession(cp, sin)) == NULL) {
     bfdLog(LOG_INFO, "Can't find session for ctl pkt from %s:%d[%x]\n",
-           inet_ntoa(sin->sin_addr), ntohs(sin->sin_port), ntohl(cp->myDisc));
+           inet_ntoa(sin->sin_addr), ntohs(sin->sin_port), CPKT_GET_MY_DISCR(cp));
     return;
   }
 
-  if (cp->yourDisc == 0 &&
+  if (CPKT_GET_YOUR_DISCR(cp) == 0 &&
       !(bfd->SessionState == BFDSTATE_DOWN ||
         bfd->SessionState == BFDSTATE_ADMINDOWN))
   {
     bfdLog(LOG_INFO, "[%x] Bad state, zero yourDiscr in pkt from %s:%d[%x]\n",
            bfd->LocalDiscr, inet_ntoa(sin->sin_addr), ntohs(sin->sin_port),
-           ntohl(cp->myDisc));
+           CPKT_GET_MY_DISCR(cp));
     return;
   }
 
-  if (cp->f_auth) {
+  if (CPKT_GET_AUTH(cp)) {
     bfdLog(LOG_INFO, "[%x] Auth in use for pkt from %s:%d[%x] - UNSUPPORTED\n",
            bfd->LocalDiscr, inet_ntoa(sin->sin_addr), ntohs(sin->sin_port),
-           ntohl(cp->myDisc));
+           CPKT_GET_MY_DISCR(cp));
     return;
   }
 
-  bfd->RemoteDiscr = ntohl(cp->myDisc);
-  bfd->RemoteSessionState = cp->state;
-  bfd->RemoteDemandMode = cp->f_demand;
-  bfd->RemoteMinRxInterval = ntohl(cp->requiredMinRx);
+  bfd->RemoteDiscr = CPKT_GET_MY_DISCR(cp);
+  bfd->RemoteSessionState = CPKT_GET_STATE(cp);
+  bfd->RemoteDemandMode = CPKT_GET_DEMAND(cp);
+  bfd->RemoteMinRxInterval = CPKT_GET_MIN_RX_INT(cp);
 
-  if (bfd->PollSeqInProgress && cp->f_final) {
+  if (bfd->PollSeqInProgress && CPKT_GET_FINAL(cp)) {
     bfdLog(LOG_INFO, "[%x] Poll sequence concluded to peer %s\n",
            bfd->LocalDiscr, bfd->Sn.SnIdStr);
     bfd->PollSeqInProgress = 0;
@@ -162,7 +162,7 @@ void bfdRcvPkt(int s, void *arg)
     tpStopTimer(&(bfd->DetectTimer));
   }
 
-  if (cp->f_final) {
+  if (CPKT_GET_FINAL(cp)) {
     bfd->Polling = 0;
     bfd->ActiveDesiredMinTx = bfd->SendDesiredMinTx;
   }
@@ -176,11 +176,11 @@ void bfdRcvPkt(int s, void *arg)
   if (!bfd->DemandModeActive) {
     uint32_t rcvDMT, selected;
 
-    rcvDMT = ntohl(cp->desiredMinTx);
+    rcvDMT = CPKT_GET_MIN_TX_INT(cp);
     selected = (bfd->Sn.RequiredMinRxInterval > rcvDMT) ?
                   bfd->Sn.RequiredMinRxInterval : rcvDMT;
 
-    bfd->DetectTime = cp->detectMult * selected;
+    bfd->DetectTime = (uint32_t)CPKT_GET_DETECT_MULT(cp) * selected;
   } else {
     uint32_t selected;
 
@@ -195,27 +195,29 @@ void bfdRcvPkt(int s, void *arg)
     return;
   }
 
-  if (cp->state == BFDSTATE_ADMINDOWN) {
+  if (bfd->RemoteSessionState == BFDSTATE_ADMINDOWN) {
     if (bfd->SessionState != BFDSTATE_DOWN) {
       bfdSessionDown(bfd, BFDDIAG_NEIGHBORSAIDDOWN);
       sendPkt = true;
     }
   } else {
     if (bfd->SessionState == BFDSTATE_DOWN) {
-      if (cp->state == BFDSTATE_DOWN) {
+      if (bfd->RemoteSessionState == BFDSTATE_DOWN) {
         bfd->SessionState = BFDSTATE_INIT;
         bfdNotify(bfd);
-      } else if (cp->state == BFDSTATE_INIT) {
+      } else if (bfd->RemoteSessionState == BFDSTATE_INIT) {
         bfdSessionUp(bfd);
         sendPkt = true;
       }
     } else if (bfd->SessionState == BFDSTATE_INIT) {
-      if (cp->state == BFDSTATE_INIT || cp->state == BFDSTATE_UP) {
+      if (bfd->RemoteSessionState == BFDSTATE_INIT ||
+          bfd->RemoteSessionState == BFDSTATE_UP)
+      {
         bfdSessionUp(bfd);
         sendPkt = true;
       }
     } else { /* bfd->SessionState == BFDSTATE_UP */
-      if (cp->state == BFDSTATE_DOWN) {
+      if (bfd->RemoteSessionState == BFDSTATE_DOWN) {
         bfdSessionDown(bfd, BFDDIAG_NEIGHBORSAIDDOWN);
         sendPkt = true;
       }
@@ -227,8 +229,8 @@ void bfdRcvPkt(int s, void *arg)
                            bfd->SessionState == BFDSTATE_UP &&
                            bfd->RemoteSessionState == BFDSTATE_UP);
 
-  if (cp->f_poll || sendPkt) {
-    bfdSendCPkt(bfd, cp->f_poll);
+  if (CPKT_GET_POLL(cp) || sendPkt) {
+    bfdSendCPkt(bfd, CPKT_GET_POLL(cp));
   } else if (oldXmtTime != bfd->XmtTime) {
     /* If new xmtTime is before next expiry */
     if (tpGetTimeRemaining(&(bfd->XmtTimer)) > (bfd->XmtTime*9)/10) {
@@ -329,22 +331,24 @@ static void bfdSessionUp(bfdSessionInt *bfd)
 /*
  * Find the session corresponding to an incoming ctl packet
  */
-static bfdSessionInt *bfdGetSession(bfdCpkt *cp, struct sockaddr_in *sin)
+static bfdSessionInt *bfdGetSession(uint8_t* cp, struct sockaddr_in *sin)
 {
   bfdSessionInt *bfd;
   uint32_t hkey;
+  uint32_t yrDiscr;
 
-  if (cp->yourDisc) {
+  if (CPKT_GET_YOUR_DISCR(cp)) {
     /* Your discriminator not zero - use it to find session */
-    hkey = BFD_MKHKEY(ntohl(cp->yourDisc));
+    yrDiscr = CPKT_GET_YOUR_DISCR(cp);
+    hkey = BFD_MKHKEY(yrDiscr);
     for (bfd = sessionHash[hkey]; bfd != NULL; bfd = bfd->HashNext) {
-      if (bfd->LocalDiscr == ntohl(cp->yourDisc)) {
+      if (bfd->LocalDiscr == yrDiscr) {
         return(bfd);
       }
     }
     bfdLog(LOG_INFO, "Can't find session for %x from %s:%d[%x]\n",
-           ntohl(cp->yourDisc), inet_ntoa(sin->sin_addr),
-           ntohs(sin->sin_port), ntohl(cp->myDisc));
+           yrDiscr, inet_ntoa(sin->sin_addr),
+           ntohs(sin->sin_port), CPKT_GET_MY_DISCR(cp));
     return(NULL);
   } else {
     /* Your discriminator zero - use peer address to find session */
@@ -355,7 +359,7 @@ static bfdSessionInt *bfdGetSession(bfdCpkt *cp, struct sockaddr_in *sin)
       }
     }
     bfdLog(LOG_INFO, "Can't find session for peer %s:%d[%x]\n",
-           inet_ntoa(sin->sin_addr), ntohs(sin->sin_port), cp->myDisc);
+           inet_ntoa(sin->sin_addr), ntohs(sin->sin_port), CPKT_GET_MY_DISCR(cp));
     return(NULL);
   }
 }
@@ -365,26 +369,28 @@ static bfdSessionInt *bfdGetSession(bfdCpkt *cp, struct sockaddr_in *sin)
  */
 void bfdSendCPkt(bfdSessionInt *bfd, int fbit)
 {
-  bfdCpkt cp;
+  uint8_t cp[BFD_MINPKTLEN];
   struct sockaddr_in sin;
 
+  memset(cp, 0, BFD_MINPKTLEN);
+
   /* Set fields according to section 6.8.7 */
-  cp.version = BFD_VERSION;
-  cp.state = bfd->SessionState;
-  cp.diag = bfd->LocalDiag;
-  cp.f_demand = bfd->Sn.DemandMode ? 1 : 0;
-  cp.f_poll = bfd->Polling;
-  cp.f_final = fbit ? 1 : 0;
-  cp.f_cpi = 0;
-  cp.f_auth = 0;
-  cp.f_multipoint = 0;
-  cp.detectMult = bfd->Sn.DetectMult;
-  cp.len = BFD_MINPKTLEN;
-  cp.myDisc = htonl(bfd->LocalDiscr);
-  cp.yourDisc = htonl(bfd->RemoteDiscr);
-  cp.desiredMinTx = htonl(bfd->SendDesiredMinTx);
-  cp.requiredMinRx = htonl(bfd->Sn.RequiredMinRxInterval);
-  cp.requiredMinEcho = 0;
+  CPKT_SET_VERS(cp, BFD_VERSION);
+  CPKT_SET_STATE(cp, bfd->SessionState);
+  CPKT_SET_DIAG(cp, bfd->LocalDiag);
+  CPKT_SET_DEMAND(cp, bfd->Sn.DemandMode);
+  CPKT_SET_POLL(cp, bfd->Polling);
+  CPKT_SET_FINAL(cp, fbit);
+  CPKT_SET_CPI(cp, 0);
+  CPKT_SET_AUTH(cp, 0);
+  CPKT_SET_MULTIPOINT(cp, 0);
+  CPKT_SET_DETECT_MULT(cp, bfd->Sn.DetectMult);
+  CPKT_SET_LEN(cp, BFD_MINPKTLEN);
+  CPKT_SET_MY_DISCR(cp, bfd->LocalDiscr);
+  CPKT_SET_YOUR_DISCR(cp, bfd->RemoteDiscr);
+  CPKT_SET_MIN_TX_INT(cp, bfd->SendDesiredMinTx);
+  CPKT_SET_MIN_RX_INT(cp, bfd->Sn.RequiredMinRxInterval);
+  CPKT_SET_MIN_ECHO_RX_INT(cp, 0);
   sin.sin_family = AF_INET;
   sin.sin_addr = bfd->Sn.PeerAddr;
   sin.sin_port = htons(bfd->Sn.PeerPort);
