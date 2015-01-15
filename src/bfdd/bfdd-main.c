@@ -15,7 +15,7 @@
 static void bfddUsage(void)
 {
   fprintf(stderr, "Usage:\n");
-  fprintf(stderr, "\tbfdd [options] [-c <config-file>] [-d] [-m port] [-v]\n");
+  fprintf(stderr, "\tbfdd [-c <config-file>] [-d] [-m port] [-v]\n");
   fprintf(stderr, "Where:\n");
   fprintf(stderr, "\t-c: load 'config-file' for startup configuration\n");
   fprintf(stderr, "Options:\n");
