@@ -26,6 +26,9 @@ typedef void (*tpSktActor)(int, void *);
 
 /* Signal handler stuff */
 typedef void (*tpSigActor)(int);
+#ifndef SIGUNUSED
+#define SIGUNUSED SIGSYS
+#endif
 #define TP_MAXSIGNALS       (SIGUNUSED + 1)
 
 /* Public function prototypes */
